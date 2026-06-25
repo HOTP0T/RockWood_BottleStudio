@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  [data-root]{font-family:'Hanken Grotesk',system-ui,sans-serif;color:#211E19}
+  button{font-family:inherit;cursor:pointer;border:none;background:none}
+  input{font-family:inherit}
+  input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  input[type=number]{-moz-appearance:textfield}
+  :focus{outline:none}
+  :focus-visible{outline:2px solid #A9762E;outline-offset:2px;border-radius:3px}
+  [data-card]{transition:border-color .18s ease, box-shadow .22s ease, transform .18s ease, background .18s ease}
+  [data-press]{transition:transform .12s ease, background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease}
+  [data-press]:active{transform:translateY(1px)}
+  [data-handle]{cursor:grab;transition:transform .12s ease}
+  [data-handle]:active{cursor:grabbing}
+  [data-handle]:focus-visible{outline:none}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:3px;border-radius:3px;background:#E4DDD1;cursor:pointer}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;height:16px;width:16px;border-radius:50%;background:#211E19;border:2px solid #FCFAF6;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  input[type=range]::-moz-range-thumb{height:14px;width:14px;border-radius:50%;background:#211E19;border:2px solid #FCFAF6}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#D8D0C2;border-radius:8px;border:3px solid transparent;background-clip:content-box}
+  @keyframes bsFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  @keyframes bsToast{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+</style>
+</helmet>
+<div data-root style="min-height:100vh;background:#F6F3ED">{{ app }}</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: &quot;100%&quot;, &quot;height&quot;: &quot;100%&quot; },
+  &quot;accent&quot;: { &quot;editor&quot;: &quot;color&quot;, &quot;default&quot;: &quot;#A9762E&quot;, &quot;tsType&quot;: &quot;string&quot; },
+  &quot;litStage&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot; }
+}">
+class Component extends DCLogic {
+  h = (t, p, ...c) => React.createElement(t, p, ...(c.flat()));
+
+  // ---- reference data ----
+  RANGES = {
+    mouth:[1.5,8], bore:[0.8,7], finishHeight:[0.4,7], neck:[0.5,12], neckWidth:[1.4,8],
+    shoulderHeight:[0.5,12], shoulderWidth:[4,22], shoulderRadius:[0,1],
+    body:[4,35], bodyDepth:[4,22], wallThickness:[0.15,0.8],
+    baseWidth:[4,22], heelRadius:[0,1], punt:[0,3], slug:[0.3,4], headspace:[0.02,0.25]
+  };
+  STEPS = {
+    mouth:0.02, bore:0.02, finishHeight:0.02, neck:0.1, neckWidth:0.05,
+    shoulderHeight:0.1, shoulderWidth:0.1, shoulderRadius:0.02,
+    body:0.1, bodyDepth:0.1, wallThickness:0.01,
+    baseWidth:0.1, heelRadius:0.02, punt:0.05, slug:0.05, headspace:0.005
+  };
+  AREAF = { round:0.785, oval:0.785, square:0.96, hexagonal:0.83 };
+  TOOLING = { round:8000, oval:11000, square:13000, hexagonal:16000 };
+  PROCESS = {
+    bb:{ label:'Blow–Blow', dist:0.55, wf:1.00 },
+    nnpb:{ label:'Press–Blow / NNPB', dist:0.85, wf:0.82 }
+  };
+  MATERIALS = [
+    { key:'extra-flint', label:'Extra Flint', mult:1.00, moq:20000, protect:'None — ultra-clear', sw:'#EAF3F2' },
+    { key:'flint', label:'Flint', mult:0.92, moq:100000, protect:'None — standard clear', sw:'#E4EDE9' },
+    { key:'cobalt-blue', label:'Cobalt Blue', mult:1.45, moq:200000, protect:'Medium', sw:'#1F3A8A' },
+    { key:'ceramic', label:'Opal / Ceramic', mult:1.85, moq:7000, protect:'Total — opaque', sw:'#F2EFE8' }
+  ];
+  FILLTYPES = [
+    { key:'still-wine', label:'Still wine', hs:0.03 },
+    { key:'spirits', label:'Spirits', hs:0.045 },
+    { key:'food-oil', label:'Food / oil', hs:0.05 },
+    { key:'hot-fill', label:'Hot-fill', hs:0.06 },
+    { key:'carbonated', label:'Carbonated / beer', hs:0.09 }
+  ];
+  CLOSURES = [
+    { key:'screw-cap', label:'Screw cap', desc:'Threaded continuous-thread or ROPP' },
+    { key:'t-cap', label:'T-cap', desc:'Cork / bartop stopper' },
+    { key:'mouth-ring', label:'Mouth ring', desc:'Crown or pry-off lip' }
+  ];
+  SHAPES = [
+    { key:'square', label:'Square' },
+    { key:'round', label:'Round' },
+    { key:'oval', label:'Oval' },
+    { key:'hexagonal', label:'Hexagonal' }
+  ];
+  FINISHES = [
+    { key:'28-400', name:'28-400', T:2.84, I:2.16, H:1.02, style:'Continuous thread', std:'GPI', closures:['screw-cap'] },
+    { key:'24-410', name:'24-410', T:2.44, I:1.78, H:1.42, style:'Continuous thread', std:'GPI', closures:['screw-cap'] },
+    { key:'38-400', name:'38-400', T:3.85, I:3.02, H:1.02, style:'Continuous thread', std:'GPI', closures:['screw-cap'] },
+    { key:'bvs-30', name:'BVS 30×60', T:3.00, I:1.85, H:6.00, style:'ROPP / BVS', std:'CETIE', closures:['screw-cap','t-cap'] },
+    { key:'cork-185', name:'Cork 18.5', T:2.10, I:1.85, H:4.50, style:'Cork / bartop', std:'—', closures:['t-cap'] },
+    { key:'crown-26', name:'Crown 26', T:2.66, I:1.60, H:0.60, style:'Crown', std:'EN', closures:['mouth-ring'] },
+    { key:'gl45', name:'GL45', T:4.50, I:3.60, H:1.40, style:'DIN lab thread', std:'DIN', closures:['screw-cap'] }
+  ];
+  GLASS_DENSITY = 2.5; COST_PER_GRAM = 0.00335;
+  STAGE_SCALE = 15;
+
+  baseDims() {
+    return { mouth:2.84, bore:2.16, finishHeight:1.02, neck:4.0, neckWidth:2.6,
+      shoulderHeight:3.0, shoulderWidth:8.6, shoulderRadius:0.5,
+      body:15, bodyDepth:8.6, wallThickness:0.25,
+      baseWidth:8.6, heelRadius:0.4, punt:0.8, slug:1.4, headspace:0.045 };
+  }
+
+  PRESETS = [
+    { key:'bordeaux', label:'Bordeaux 750', cap:750, finish:'bvs-30', shape:'round', closure:'screw-cap',
+      d:{ mouth:3.0, bore:1.85, finishHeight:2.4, neck:5.0, neckWidth:2.7, shoulderHeight:2.4, shoulderWidth:7.8, shoulderRadius:0.25, body:18.5, bodyDepth:7.8, wallThickness:0.24, baseWidth:7.8, heelRadius:0.3, punt:1.4, slug:1.2, headspace:0.03 } },
+    { key:'boston', label:'Boston round 250', cap:250, finish:'24-410', shape:'round', closure:'screw-cap',
+      d:{ mouth:2.44, bore:1.78, finishHeight:1.42, neck:2.4, neckWidth:2.2, shoulderHeight:2.2, shoulderWidth:5.6, shoulderRadius:0.7, body:9.5, bodyDepth:5.6, wallThickness:0.2, baseWidth:5.6, heelRadius:0.5, punt:0.3, slug:1.0, headspace:0.05 } },
+    { key:'beer', label:'Beer long-neck 330', cap:330, finish:'crown-26', shape:'round', closure:'mouth-ring',
+      d:{ mouth:2.66, bore:1.6, finishHeight:0.6, neck:6.0, neckWidth:2.4, shoulderHeight:2.0, shoulderWidth:6.2, shoulderRadius:0.55, body:11.5, bodyDepth:6.2, wallThickness:0.22, baseWidth:6.2, heelRadius:0.45, punt:0.9, slug:1.1, headspace:0.09 } },
+    { key:'jar', label:'Wide-mouth jar 500', cap:500, finish:'38-400', shape:'round', closure:'screw-cap',
+      d:{ mouth:3.85, bore:3.02, finishHeight:1.02, neck:1.0, neckWidth:6.2, shoulderHeight:1.6, shoulderWidth:8.4, shoulderRadius:0.8, body:9.0, bodyDepth:8.4, wallThickness:0.26, baseWidth:8.0, heelRadius:0.4, punt:0.2, slug:1.3, headspace:0.05 } }
+  ];
+
+  HELP = {
+    shoulderWidth:'The widest body diameter, measured at the shoulder. The main driver of footprint size and capacity. Drag the right edge at the shoulder to change it.',
+    body:'Straight body height between the shoulder and the heel — the biggest lever on capacity. A taller body holds more.',
+    bodyDepth:'Front-to-back depth for oval and rectangular footprints. Round bottles keep depth equal to width.',
+    shoulderHeight:'Vertical run of the shoulder, where the neck flares out to the full body width. Taller = a more gradual slope.',
+    shoulderRadius:'How rounded the shoulder is — from a sharp, angular break (sharp) to a soft dome (round).',
+    wall:'Bows the body wall outward (convex) or pulls it inward (concave). A purely cosmetic profile; 0 is dead straight.',
+    wallThickness:'Average glass thickness of the side wall. Thicker walls feel premium but add weight and cost, and raise the minimum wall.',
+    mouth:'Outer diameter of the threaded finish — the “T” dimension. It must match the closure family you picked.',
+    bore:'The inner throat opening — the “I” dimension — that the liquid pours through. Must stay smaller than the thread Ø.',
+    finishHeight:'Height of the finish — the “H” dimension — from the rim down to where the neck begins.',
+    neck:'Height of the neck between the finish and the shoulder.',
+    neckWidth:'Neck diameter. It must stay narrower than the shoulder Ø, or the parison can’t be formed.',
+    baseWidth:'Diameter of the base and heel. Keep it at or below the shoulder Ø so the bottle stands stably.',
+    heelRadius:'Roundness of the heel — the corner where the body wall curves into the base.',
+    punt:'Depth of the push-up (punt) domed up into the base. Adds strength for carbonated fills, but subtracts capacity.',
+    slug:'Solid glass thickness at the base. Thicker = a heavier, lower-centred, more stable bottle.',
+    headspace:'Ullage — the air gap between the fill line and the brim, as a % of nominal volume. Set automatically by fill type.',
+    fillType:'What goes inside. Sets the recommended headspace and drives carbonation-related feasibility checks.',
+    material:'Glass family — changes clarity, light/UV protection, the cost multiplier and the minimum order quantity.',
+    process:'Forming method. NNPB (press–blow) distributes glass more evenly, so bottles can run lighter than Blow–Blow.',
+    quantity:'How many bottles in the order. Tooling cost is spread across the run, so larger orders lower the all-in price.'
+  };
+  FLOW = ['contact','closure','capacity','shape','refine','material','summary'];
+
+  state = {
+    idx: 0,
+    contact: { email:'', phone:'' },
+    closure: 'screw-cap',
+    capacity: 750,
+    shape: 'round',
+    units: 'mm',
+    advanced: false,
+    activeTab: 'size',
+    material: 'flint',
+    finish: '28-400',
+    fillType: 'spirits',
+    process: 'bb',
+    quantity: 50000,
+    wall: 0,
+    dimensions: this.baseDims(),
+    feasOpen: false,
+    toast: null,
+    dragging: false,
+    disp: null,
+    tip: null
+  };
+
+  // ---- helpers ----
+  clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  fmt(n, d=0) { if(!isFinite(n)) n=0; return n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+  money(n) { return '$' + this.fmt(n, 2); }
+  reduced() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){ return false; } }
+  toDisp(v) { return this.state.units==='mm' ? v*10 : v; }
+  fromDisp(v) { return this.state.units==='mm' ? v/10 : v; }
+  uLabel() { return this.state.units; }
+
+  dispNow() { return this.state.disp || this.metricsFrom(this.estimate(this.state)); }
+  componentDidMount() {
+    if(!this.state.disp) this.setState({ disp:this.metricsFrom(this.estimate(this.state)) });
+    this._mv = (e)=>this.onMove(e);
+    this._up = (e)=>this.onUp(e);
+    window.addEventListener('pointermove', this._mv, { passive:false });
+    window.addEventListener('pointerup', this._up);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('pointermove', this._mv);
+    window.removeEventListener('pointerup', this._up);
+    cancelAnimationFrame(this._raf);
+  }
+
+  // ================= ENGINE =================
+  perim(shape, w, d) {
+    if(shape==='square') return 2*(w+d);
+    if(shape==='hexagonal') return 1.732*(w+d);
+    const a=w/2, b=d/2; // ellipse (round/oval), Ramanujan
+    return Math.PI*(3*(a+b)-Math.sqrt((3*a+b)*(a+3*b)));
+  }
+  depthRatio(s) {
+    return s.shape==='oval' ? this.clamp(s.dimensions.bodyDepth/s.dimensions.shoulderWidth,0.3,1.6) : 1;
+  }
+  estimate(s) {
+    const d=s.dimensions, t=d.wallThickness, shape=s.shape;
+    const k=this.depthRatio(s), aF=this.AREAF[shape]||0.785;
+    const per=(w)=>this.perim(shape,w,w*k);
+    const innerA=(w)=>aF*Math.max(0,(w-2*t))*Math.max(0,(w*k-2*t));
+    let glass=0;
+    const wall=(w0,w1,hh)=>{ glass += ((per(w0)+per(w1))/2)*hh*t; };
+    wall(d.mouth,d.mouth,d.finishHeight);
+    wall(d.neckWidth,d.neckWidth,d.neck);
+    wall(d.neckWidth,d.shoulderWidth,d.shoulderHeight);
+    wall(d.shoulderWidth,d.baseWidth,d.body);
+    const baseArea=aF*d.baseWidth*(d.baseWidth*k);
+    glass += baseArea*d.slug*0.70;
+    const fr=(w0,w1,hh)=>{ const A0=innerA(w0),A1=innerA(w1); return hh/3*(A0+A1+Math.sqrt(A0*A1)); };
+    let cap=0;
+    cap+=fr(d.mouth,d.mouth,d.finishHeight);
+    cap+=fr(d.neckWidth,d.neckWidth,d.neck);
+    cap+=fr(d.neckWidth,d.shoulderWidth,d.shoulderHeight);
+    cap+=fr(d.shoulderWidth,d.baseWidth,d.body);
+    cap -= innerA(d.baseWidth)*d.punt*0.5;
+    cap=Math.max(1,cap);
+    const proc=this.PROCESS[s.process]||this.PROCESS.bb;
+    const weightG=glass*this.GLASS_DENSITY*proc.wf;
+    const brimful=cap, fill=brimful*(1-d.headspace);
+    const mat=this.MATERIALS.find(m=>m.key===s.material)||this.MATERIALS[1];
+    const wallMult=1+0.08*Math.abs(s.wall);
+    const unitGlass=weightG*this.COST_PER_GRAM*mat.mult*wallMult;
+    const closure=d.mouth*0.037+0.01;
+    const unit=unitGlass+closure;
+    const tooling=this.TOOLING[shape]||8000;
+    const qty=Math.max(1,s.quantity), tpu=tooling/qty;
+    const overall=d.finishHeight+d.neck+d.shoulderHeight+d.body;
+    const minWall=t*proc.dist*10;
+    const ratio=weightG/Math.max(1,fill);
+    return {
+      weightG, costUSD:unit, brimfulMl:brimful, fillMl:fill, fillFraction:fill/brimful,
+      overallHeightCm:overall, ratio, minWallMm:minWall,
+      tol:{ heightMm:0.6+0.004*overall*10, diaMm:0.5+0.012*d.shoulderWidth*10, capPct:2 },
+      order:{ quantity:qty, moq:mat.moq, belowMoq:qty<mat.moq, unitCost:unit, toolingPerUnit:tpu, unitAllIn:unit+tpu, tooling, totalOrder:unit*qty+tooling },
+      wrapLabelCm2:per(d.shoulderWidth)*d.body*0.8,
+      breakdown:{ glassVolumeCm3:glass, materialMult:mat.mult, wallMult, depthRatio:k, process:s.process }
+    };
+  }
+  feasibility(s) {
+    const d=s.dimensions, e=this.estimate(s), out=[];
+    if(d.neckWidth>d.shoulderWidth) out.push({level:'error',msg:'Neck \u00d8 exceeds shoulder \u00d8 \u2014 the parison cannot form.', fix:{tab:'finish', hint:'Reduce Neck \u00d8 on the Finish tab'}});
+    if(d.bore>=d.mouth) out.push({level:'error',msg:'Bore \u00d8 \u2265 thread \u00d8 \u2014 no glass left for the finish wall.', fix:{tab:'finish', adv:true, hint:'Raise Thread \u00d8 or lower Bore \u00d8 (Finish tab)'}});
+    if(d.baseWidth>d.shoulderWidth) out.push({level:'warn',msg:'Base \u00d8 exceeds shoulder \u00d8 \u2014 inverted taper is unstable.', fix:{tab:'base', hint:'Reduce Base \u00d8 on the Base tab'}});
+    if(e.overallHeightCm/d.shoulderWidth>4) out.push({level:'warn',msg:'Height-to-width over 4:1 \u2014 tip-over risk.', fix:{tab:'size', hint:'Lower Body height or widen Body \u00d8 (Size tab)'}});
+    if(e.minWallMm<1.0) out.push({level:'warn',msg:'Min wall under 1.0 mm \u2014 thin spots likely.', fix:{tab:'size', adv:true, hint:'Increase Wall thickness (Size tab, Advanced)'}});
+    if(s.fillType==='carbonated' && (e.minWallMm<1.5 || d.punt*10<20)) out.push({level:'warn',msg:'Carbonated fill needs min wall \u22651.5 mm and punt \u226520 mm.', fix:{tab:'base', hint:'Deepen the Punt (Base) or thicken the Wall (Size)'}});
+    if(d.punt>d.slug) out.push({level:'warn',msg:'Push-up is deeper than the base is thick.', fix:{tab:'base', hint:'Reduce Push-up depth or thicken Base glass (Base tab)'}});
+    const fin=this.FINISHES.find(f=>f.key===s.finish);
+    if(fin && !fin.closures.includes(s.closure)) out.push({level:'warn',msg:'Chosen closure is not compatible with the '+fin.name+' finish.', fix:{tab:'finish', hint:'Pick a compatible finish on the Finish tab'}});
+    const drift=Math.abs(e.fillMl-s.capacity)/Math.max(1,s.capacity);
+    if(drift>0.12) out.push({level:'info',msg:'Fill capacity drifts '+Math.round(drift*100)+'% from your '+s.capacity+' ml target.', fix:{action:'match', tab:'size', hint:'Auto-fit Body height to '+s.capacity+' ml'}});
+    if(e.order.belowMoq) out.push({level:'info',msg:'Order qty is below this material\u2019s MOQ ('+this.fmt(e.order.moq)+').', fix:{tab:'production', hint:'Raise Order quantity or change material (Production tab)'}});
+    return out;
+  }
+  feasSummary(s) {
+    const f=this.feasibility(s);
+    const err=f.filter(x=>x.level==='error').length, warn=f.filter(x=>x.level==='warn').length;
+    if(err) return { level:'error', glyph:'\u2715', text:err+' issue'+(err>1?'s':''), list:f };
+    if(warn) return { level:'warn', glyph:'!', text:warn+' warning'+(warn>1?'s':''), list:f };
+    return { level:'ok', glyph:'\u2713', text:'Buildable', list:f };
+  }
+  metricsFrom(e) {
+    return { weightG:e.weightG, fillMl:e.fillMl, brimfulMl:e.brimfulMl, ratio:e.ratio,
+      overallHeightCm:e.overallHeightCm, priceUSD:e.costUSD, allInUSD:e.order.unitAllIn };
+  }
+
+  // ================= STATE MUTATION =================
+  afterChange() { this.tween(); }
+  tween() {
+    const target=this.metricsFrom(this.estimate(this.state));
+    if(this.reduced() || this.state.dragging) { this.setState({ disp:target }); return; }
+    cancelAnimationFrame(this._raf);
+    const start={...this.state.disp}, t0=performance.now(), dur=420;
+    const step=(now)=>{
+      const kk=Math.min(1,(now-t0)/dur), ee=1-Math.pow(1-kk,3), d={};
+      for(const key in target) d[key]=start[key]+(target[key]-(start[key]||0))*ee;
+      this.setState({ disp:d });
+      if(kk<1) this._raf=requestAnimationFrame(step);
+    };
+    this._raf=requestAnimationFrame(step);
+  }
+  setDim(key, val) {
+    const r=this.RANGES[key]; if(r) val=this.clamp(val, r[0], r[1]);
+    this.setState(st=>({ dimensions:{...st.dimensions, [key]:val} }), ()=>this.afterChange());
+  }
+  setField(patch) { this.setState(patch, ()=>this.afterChange()); }
+  setFill(key) {
+    const f=this.FILLTYPES.find(x=>x.key===key);
+    this.setState(st=>({ fillType:key, dimensions:{...st.dimensions, headspace:f?f.hs:st.dimensions.headspace} }), ()=>this.afterChange());
+  }
+  setFinish(key) {
+    const f=this.FINISHES.find(x=>x.key===key); if(!f) return;
+    this.setState(st=>({ finish:key, dimensions:{...st.dimensions, mouth:f.T, bore:f.I, finishHeight:f.H} }), ()=>this.afterChange());
+  }
+  applyPreset(p) {
+    this.setState({ dimensions:{...p.d}, capacity:p.cap, shape:p.shape, finish:p.finish, closure:p.closure }, ()=>this.afterChange());
+  }
+  matchCapacity() {
+    // solve body height so fill ~= target
+    let lo=this.RANGES.body[0], hi=this.RANGES.body[1], best=this.state.dimensions.body;
+    for(let i=0;i<28;i++){
+      const mid=(lo+hi)/2;
+      const test={...this.state, dimensions:{...this.state.dimensions, body:mid}};
+      const fill=this.estimate(test).fillMl;
+      if(fill<this.state.capacity) lo=mid; else hi=mid;
+      best=mid;
+    }
+    this.setDim('body', best);
+    this.flash('Body height tuned to hit '+this.state.capacity+' ml');
+  }
+  flash(msg) {
+    this.setState({ toast:msg });
+    clearTimeout(this._tt);
+    this._tt=setTimeout(()=>this.setState({ toast:null }), 2600);
+  }
+
+  // ================= NAV =================
+  go(i) { this.setState({ idx:this.clamp(i,0,this.FLOW.length-1) }); }
+  emailOk() { return /.+@.+\..+/.test(this.state.contact.email); }
+  canNext() { if(this.FLOW[this.state.idx]==='contact') return this.emailOk(); return true; }
+
+  estimateObject() {
+    const s=this.state, e=this.estimate(s), fin=this.FINISHES.find(f=>f.key===s.finish);
+    return {
+      generatedAt:new Date().toISOString(),
+      contact:s.contact, closure:s.closure, capacityMl:s.capacity, shape:s.shape,
+      material:s.material, wallCurvature:s.wall, finish:fin?fin.name:s.finish,
+      dimensionsCm:{...s.dimensions},
+      estimate:{ glassWeightG:Math.round(e.weightG), costPerBottleUSD:Math.round(e.costUSD*100)/100,
+        overallHeightCm:Math.round(e.overallHeightCm*100)/100, brimfulCapacityMl:Math.round(e.brimfulMl),
+        fillCapacityMl:Math.round(e.fillMl), targetCapacityMl:s.capacity, moq:e.order.moq,
+        orderQuantity:s.quantity, allInPerBottleUSD:Math.round(e.order.unitAllIn*100)/100,
+        orderTotalUSD:Math.round(e.order.totalOrder) },
+      disclaimer:'PLACEHOLDER pricing — naked bottle, excludes cap, label & decoration.'
+    };
+  }
+  download() {
+    const obj=this.estimateObject();
+    const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download='bottle-estimate.json'; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    this.flash('Estimate JSON downloaded');
+  }
+  send() {
+    const obj=this.estimateObject();
+    console.log('[Bottle Studio] estimate submitted:', obj);
+    this.flash('Estimate sent to sales \u2014 logged for handoff');
+  }
+  restart() {
+    this.setState({ idx:0, contact:{email:'',phone:''}, dimensions:this.baseDims(), capacity:750,
+      shape:'round', material:'flint', finish:'28-400', closure:'screw-cap', wall:0, quantity:50000,
+      fillType:'spirits', process:'bb' }, ()=>this.afterChange());
+  }
+
+  // ================= DRAG =================
+  beginDrag(key, axis, e) {
+    e.preventDefault(); e.stopPropagation();
+    const ratio=this._svg ? this._svg.getBoundingClientRect().width/this.viewW : 1;
+    this._drag={ key, axis, startVal:this.state.dimensions[key], x0:e.clientX, y0:e.clientY, ratio };
+    this.setState({ dragging:true });
+  }
+  onMove(e) {
+    if(!this._drag) return;
+    e.preventDefault();
+    const dr=this._drag, S=this.STAGE_SCALE, R=dr.ratio||1;
+    let nv=dr.startVal;
+    if(dr.axis==='width') nv=dr.startVal + 2*(e.clientX-dr.x0)/(S*R);
+    else nv=dr.startVal + (e.clientY-dr.y0)/(S*R);
+    this.setDim(dr.key, nv);
+  }
+  onUp() {
+    if(!this._drag) return;
+    this._drag=null;
+    this.setState({ dragging:false }, ()=>this.tween());
+  }
+  onHandleKey(key, e) {
+    const st=this.STEPS[key]||0.1, r=this.RANGES[key];
+    let v=this.state.dimensions[key], used=true;
+    const big=e.shiftKey?10:1;
+    if(e.key==='ArrowRight'||e.key==='ArrowUp') v+=st*big;
+    else if(e.key==='ArrowLeft'||e.key==='ArrowDown') v-=st*big;
+    else if(e.key==='Home') v=r[0];
+    else if(e.key==='End') v=r[1];
+    else used=false;
+    if(used){ e.preventDefault(); this.setDim(key, v); }
+  }
+
+  // ================= RENDER =================
+  renderVals() {
+    return { app: this.renderApp() };
+  }
+  get C() {
+    const A=this.props.accent||'#A9762E';
+    return {
+      A, paper:'#F6F3ED', card:'#FCFAF6', ink:'#211E19', sub:'#736B5E', faint:'#9A9183',
+      line:'#E4DDD1', lineSoft:'#EEE9DF',
+      stageBg:'#15161A', stagePanel:'#1C1E23', stageInk:'#ECE7DD', stageSub:'#8A8780', stageLine:'#2C2E34',
+      ok:'#2F7D55', warn:'#B5811A', err:'#B23A2A'
+    };
+  }
+  serif='\'Newsreader\', Georgia, serif';
+  mono='\'IBM Plex Mono\', ui-monospace, monospace';
+
+  renderApp() {
+    const h=this.h, C=this.C, screen=this.FLOW[this.state.idx];
+    const isStudio=screen==='refine';
+    let body;
+    if(screen==='contact') body=this.screenContact();
+    else if(screen==='closure') body=this.screenClosure();
+    else if(screen==='capacity') body=this.screenCapacity();
+    else if(screen==='shape') body=this.screenShape();
+    else if(screen==='refine') body=this.screenStudio();
+    else if(screen==='material') body=this.screenMaterial();
+    else body=this.screenSummary();
+    return h('div',{ style:{ minHeight:'100vh', height:isStudio?'100vh':'auto', overflow:isStudio?'hidden':'visible', display:'flex', flexDirection:'column', background:isStudio?C.stageBg:C.paper, transition:'background .4s ease' } },
+      this.renderHeader(isStudio),
+      h('main',{ key:screen, style:{ flex:'1', display:'flex', flexDirection:'column' } }, body),
+      this.renderToast(),
+      this.renderTip()
+    );
+  }
+
+  renderHeader(dark) {
+    const h=this.h, C=this.C, idx=this.state.idx;
+    const steps=[ {k:'closure',n:'01'},{k:'capacity',n:'02'},{k:'shape',n:'03'},{k:'refine',n:'04'},{k:'material',n:'05'} ];
+    const ink=dark?C.stageInk:C.ink, sub=dark?C.stageSub:C.sub, line=dark?C.stageLine:C.line;
+    const labels={ contact:'Contact', closure:'Closure', capacity:'Capacity', shape:'Shape', refine:'Refine', material:'Material', summary:'Summary' };
+    return h('header',{ style:{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'18px',
+      padding:'18px clamp(16px,4vw,34px)', borderBottom:'1px solid '+line, position:'sticky', top:0, zIndex:30,
+      background:(dark?C.stageBg:C.paper)+'F2', backdropFilter:'blur(8px)' } },
+      h('button',{ 'data-press':'1', onClick:()=>this.go(0), style:{ display:'flex', alignItems:'center', gap:'11px', color:ink } },
+        h('span',{ style:{ width:'26px', height:'26px', borderRadius:'50%', border:'1.5px solid '+C.A, display:'grid', placeItems:'center' } },
+          h('span',{ style:{ width:'9px', height:'13px', borderRadius:'4px 4px 5px 5px', background:C.A, display:'block' } })),
+        h('span',{ style:{ fontFamily:this.serif, fontSize:'19px', fontWeight:500, letterSpacing:'.01em' } }, 'Bottle Studio')
+      ),
+      h('nav',{ style:{ display:'flex', alignItems:'center', gap:'2px', flexWrap:'wrap', justifyContent:'center' } },
+        steps.map((s,i)=>{
+          const si=this.FLOW.indexOf(s.k), active=this.FLOW[idx]===s.k, done=idx>si;
+          return h('button',{ key:s.k, 'data-press':'1', onClick:()=>this.go(si),
+            style:{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 12px', borderRadius:'999px',
+              color:active?(dark?C.stageBg:'#fff'):(done?ink:sub), background:active?C.A:'transparent',
+              fontSize:'12.5px', fontWeight:active?600:500 } },
+            h('span',{ style:{ fontFamily:this.mono, fontSize:'11px', opacity:active?1:.7 } }, s.n),
+            h('span',{ style:{ fontSize:'13px' } }, labels[s.k])
+          );
+        })
+      ),
+      h('div',{ style:{ display:'flex', alignItems:'center', gap:'8px' } },
+        this.FLOW[idx]!=='refine' ? h('span',{ style:{ fontFamily:this.mono, fontSize:'11px', color:sub, letterSpacing:'.04em' } },
+          (idx+1)+' / '+this.FLOW.length) : null,
+        this.FLOW[idx]==='refine' ? this.unitsToggle() : null
+      )
+    );
+  }
+  unitsToggle() {
+    const h=this.h, C=this.C, u=this.state.units;
+    return h('div',{ style:{ display:'inline-flex', border:'1px solid '+C.stageLine, borderRadius:'999px', overflow:'hidden' } },
+      ['mm','cm'].map(x=>h('button',{ key:x, 'data-press':'1', onClick:()=>this.setState({units:x}),
+        style:{ padding:'6px 13px', fontFamily:this.mono, fontSize:'11.5px', color:u===x?C.stageBg:C.stageSub,
+          background:u===x?C.A:'transparent', fontWeight:600 } }, x)))
+  }
+
+  // generic light-card pickable
+  pickCard(opts) {
+    const h=this.h, C=this.C;
+    const { selected, onClick, key, children, minH } = opts;
+    return h('button',{ key, 'data-card':'1', 'data-press':'1', onClick, role:'radio', 'aria-checked':selected,
+      style:{ textAlign:'left', padding:'22px', borderRadius:'4px', minHeight:minH||'auto',
+        border:'1px solid '+(selected?C.A:C.line), background:selected?'#fff':C.card,
+        boxShadow:selected?'0 10px 30px -16px rgba(120,82,20,.5)':'0 1px 2px rgba(0,0,0,.03)',
+        transform:selected?'translateY(-2px)':'none', position:'relative', cursor:'pointer' } },
+      selected ? h('span',{ style:{ position:'absolute', top:'14px', right:'14px', width:'20px', height:'20px',
+        borderRadius:'50%', background:C.A, color:'#fff', display:'grid', placeItems:'center', fontSize:'12px' } }, '\u2713') : null,
+      children
+    );
+  }
+
+  flowShell(opts) {
+    const h=this.h, C=this.C;
+    const { kicker, title, sub, children, wide } = opts;
+    return h('div',{ style:{ flex:'1', display:'flex', flexDirection:'column', alignItems:'center',
+      padding:'clamp(28px,6vh,72px) clamp(16px,4vw,34px) 40px' } },
+      h('div',{ style:{ width:'100%', maxWidth:wide||'820px' } },
+        h('div',{ style:{ fontFamily:this.mono, fontSize:'12px', letterSpacing:'.16em', textTransform:'uppercase',
+          color:C.A, marginBottom:'14px' } }, kicker),
+        h('h1',{ style:{ fontFamily:this.serif, fontSize:'clamp(30px,4.6vw,48px)', lineHeight:1.05, fontWeight:400,
+          margin:'0 0 12px', color:C.ink, letterSpacing:'-.01em', textWrap:'pretty' } }, title),
+        sub ? h('p',{ style:{ fontSize:'16px', color:C.sub, margin:'0 0 34px', maxWidth:'52ch', lineHeight:1.5 } }, sub) : null,
+        children
+      ),
+      this.flowNav()
+    );
+  }
+  flowNav() {
+    const h=this.h, C=this.C, idx=this.state.idx, screen=this.FLOW[idx];
+    const nextLabel = screen==='contact' ? 'Start designing' : screen==='material' ? 'Review estimate' : 'Continue';
+    return h('div',{ style:{ width:'100%', maxWidth:'820px', display:'flex', justifyContent:'space-between',
+      alignItems:'center', marginTop:'44px', gap:'14px' } },
+      idx>0 ? h('button',{ 'data-press':'1', onClick:()=>this.go(idx-1),
+        style:{ padding:'12px 20px', borderRadius:'999px', border:'1px solid '+C.line, background:'transparent',
+          color:C.ink, fontSize:'14px', fontWeight:500 } }, '\u2190 Back') : h('span',null),
+      h('button',{ 'data-press':'1', disabled:!this.canNext(), onClick:()=>this.go(idx+1),
+        style:{ padding:'13px 28px', borderRadius:'999px', border:'none',
+          background:this.canNext()?C.ink:'#CFC8BB', color:'#fff', fontSize:'14.5px', fontWeight:600,
+          opacity:this.canNext()?1:.7, cursor:this.canNext()?'pointer':'not-allowed',
+          boxShadow:'0 8px 22px -12px rgba(33,30,25,.7)' } }, nextLabel+'  \u2192')
+    );
+  }
+
+  field(label, value, onChange, opts={}) {
+    const h=this.h, C=this.C;
+    return h('label',{ style:{ display:'block' } },
+      h('span',{ style:{ display:'block', fontSize:'12.5px', fontWeight:600, color:C.sub, marginBottom:'8px',
+        letterSpacing:'.02em' } }, label),
+      h('input',{ value, onChange:e=>onChange(e.target.value), type:opts.type||'text', placeholder:opts.placeholder||'',
+        inputMode:opts.inputMode, style:{ width:'100%', padding:'15px 16px', borderRadius:'4px', border:'1px solid '+C.line,
+          background:'#fff', fontSize:'16px', color:C.ink } })
+    );
+  }
+
+  // ---------- CONTACT ----------
+  screenContact() {
+    const h=this.h, C=this.C, c=this.state.contact;
+    return this.flowShell({ wide:'560px', kicker:'Bottle Studio',
+      title:'Design a custom bottle. See the weight & price live.',
+      sub:'Walk through a few quick choices, then refine the glass directly on a live drawing. We\u2019ll hand the spec to our packaging engineers.',
+      children: h('div',{ style:{ display:'flex', flexDirection:'column', gap:'18px', maxWidth:'480px' } },
+        this.field('Email address *', c.email, v=>this.setState({contact:{...c,email:v}}), {type:'email', inputMode:'email', placeholder:'you@brand.com'}),
+        this.field('Phone (optional)', c.phone, v=>this.setState({contact:{...c,phone:v}}), {type:'tel', inputMode:'tel', placeholder:'+1 555 000 0000'}),
+        !this.emailOk() && c.email ? h('span',{ style:{ fontSize:'12.5px', color:C.err, display:'flex', gap:'6px', alignItems:'center' } },
+          h('span',null,'!'),'Enter a valid email to continue.') : null
+      )
+    });
+  }
+
+  glyphClosure(key, color) {
+    const h=this.h;
+    const s={ width:'56px', height:'56px' };
+    if(key==='screw-cap') return h('svg',{ viewBox:'0 0 56 56', style:s, fill:'none', stroke:color, strokeWidth:1.6 },
+      h('rect',{x:18,y:8,width:20,height:16,rx:2}), h('line',{x1:18,y1:13,x2:38,y2:13}), h('line',{x1:18,y1:18,x2:38,y2:18}),
+      h('path',{d:'M22 24 h12 v8 q0 4 -6 4 q-6 0 -6 -4 z'}));
+    if(key==='t-cap') return h('svg',{ viewBox:'0 0 56 56', style:s, fill:'none', stroke:color, strokeWidth:1.6 },
+      h('path',{d:'M20 8 h16 v6 h-3 v8 h-10 v-8 h-3 z'}), h('path',{d:'M24 22 h8 v12 q0 4 -4 4 q-4 0 -4 -4 z'}));
+    return h('svg',{ viewBox:'0 0 56 56', style:s, fill:'none', stroke:color, strokeWidth:1.6 },
+      h('ellipse',{cx:28,cy:14,rx:11,ry:4}), h('path',{d:'M17 14 v6 q0 4 11 4 q11 0 11 -4 v-6'}), h('path',{d:'M21 26 v8 M35 26 v8'}));
+  }
+  screenClosure() {
+    const h=this.h, C=this.C;
+    return this.flowShell({ kicker:'Step 01', title:'How does it close?',
+      sub:'Pick the closure family. It sets which finishes are compatible later.',
+      children: h('div',{ role:'radiogroup', style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'16px' } },
+        this.CLOSURES.map(cl=>this.pickCard({ key:cl.key, selected:this.state.closure===cl.key, minH:'196px',
+          onClick:()=>this.setState({closure:cl.key}),
+          children:h('div',{ style:{ display:'flex', flexDirection:'column', height:'100%' } },
+            h('div',{ style:{ marginBottom:'auto' } }, this.glyphClosure(cl.key, this.state.closure===cl.key?C.A:C.ink)),
+            h('div',{ style:{ fontFamily:this.serif, fontSize:'21px', marginTop:'18px', color:C.ink } }, cl.label),
+            h('div',{ style:{ fontSize:'13px', color:C.sub, marginTop:'5px', lineHeight:1.4 } }, cl.desc)
+          ) })))
+    });
+  }
+
+  // ---------- CAPACITY ----------
+  screenCapacity() {
+    const h=this.h, C=this.C;
+    const presets=[250,330,500,700,750,1000];
+    return this.flowShell({ wide:'620px', kicker:'Step 02', title:'What\u2019s the target capacity?',
+      sub:'The nominal (labelled) fill volume. You can fine-tune the exact geometry in the studio.',
+      children: h('div',null,
+        h('div',{ style:{ display:'flex', alignItems:'flex-end', gap:'14px', borderBottom:'2px solid '+C.ink,
+          paddingBottom:'10px', maxWidth:'320px' } },
+          h('input',{ type:'number', value:this.state.capacity, inputMode:'numeric',
+            onChange:e=>this.setState({capacity:Math.max(10,parseInt(e.target.value||'0',10))}),
+            style:{ width:'100%', border:'none', background:'transparent', fontFamily:this.mono, fontSize:'52px',
+              fontWeight:500, color:C.ink, padding:0 } }),
+          h('span',{ style:{ fontFamily:this.mono, fontSize:'22px', color:C.sub, paddingBottom:'8px' } }, 'ml')),
+        h('div',{ style:{ display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'22px' } },
+          presets.map(p=>h('button',{ key:p, 'data-press':'1', onClick:()=>this.setState({capacity:p}),
+            style:{ padding:'9px 16px', borderRadius:'999px', border:'1px solid '+(this.state.capacity===p?C.A:C.line),
+              background:this.state.capacity===p?'#fff':'transparent', color:this.state.capacity===p?C.A:C.sub,
+              fontFamily:this.mono, fontSize:'13px', fontWeight:600 } }, p+' ml')))
+      )
+    });
+  }
+
+  glyphShape(key, color, fill) {
+    const h=this.h;
+    const s={ width:'52px', height:'52px' }, p={ fill:fill||'none', stroke:color, strokeWidth:1.6 };
+    if(key==='round') return h('svg',{viewBox:'0 0 52 52',style:s},h('circle',{cx:26,cy:26,r:17,...p}));
+    if(key==='oval') return h('svg',{viewBox:'0 0 52 52',style:s},h('ellipse',{cx:26,cy:26,rx:12,ry:18,...p}));
+    if(key==='square') return h('svg',{viewBox:'0 0 52 52',style:s},h('rect',{x:10,y:10,width:32,height:32,rx:3,...p}));
+    return h('svg',{viewBox:'0 0 52 52',style:s},h('polygon',{points:'26,8 42,17 42,35 26,44 10,35 10,17',...p}));
+  }
+  screenShape() {
+    const h=this.h, C=this.C;
+    return this.flowShell({ kicker:'Step 03', title:'Choose the footprint.',
+      sub:'The cross-section of the body. Oval and rectangular footprints give panel-flats for labels.',
+      children: h('div',{ role:'radiogroup', style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'16px' } },
+        this.SHAPES.map(sh=>this.pickCard({ key:sh.key, selected:this.state.shape===sh.key, minH:'150px',
+          onClick:()=>this.setField({shape:sh.key}),
+          children:h('div',{ style:{ display:'flex', flexDirection:'column', alignItems:'flex-start', height:'100%' } },
+            this.glyphShape(sh.key, this.state.shape===sh.key?C.A:C.ink, this.state.shape===sh.key?C.A+'1A':'none'),
+            h('div',{ style:{ fontFamily:this.serif, fontSize:'20px', marginTop:'auto', paddingTop:'18px', color:C.ink } }, sh.label)
+          ) })))
+    });
+  }
+
+  // ---------- MATERIAL ----------
+  screenMaterial() {
+    const h=this.h, C=this.C;
+    return this.flowShell({ kicker:'Step 05', title:'Pick the glass.',
+      sub:'Material affects clarity, light protection, cost and the minimum order quantity.',
+      children: h('div',{ role:'radiogroup', style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'16px' } },
+        this.MATERIALS.map(m=>this.pickCard({ key:m.key, selected:this.state.material===m.key, minH:'200px',
+          onClick:()=>this.setField({material:m.key}),
+          children:h('div',{ style:{ display:'flex', flexDirection:'column', height:'100%' } },
+            h('div',{ style:{ width:'42px', height:'42px', borderRadius:'50%', background:m.sw, border:'1px solid '+C.line, marginBottom:'auto' } }),
+            h('div',{ style:{ fontFamily:this.serif, fontSize:'21px', marginTop:'16px', color:C.ink } }, m.label),
+            h('div',{ style:{ fontSize:'12.5px', color:C.sub, marginTop:'4px' } }, 'Light: '+m.protect),
+            h('div',{ style:{ display:'flex', gap:'14px', marginTop:'12px', fontFamily:this.mono, fontSize:'11.5px', color:C.faint } },
+              h('span',null,'\u00d7'+m.mult.toFixed(2)+' cost'),
+              h('span',null,'MOQ '+this.fmt(m.moq))
+            )
+          ) })))
+    });
+  }
+
+  // ---------- SUMMARY ----------
+  screenSummary() {
+    const h=this.h, C=this.C, obj=this.estimateObject(), e=this.estimate(this.state);
+    const row=(k,v)=>h('div',{ style:{ display:'flex', justifyContent:'space-between', gap:'16px', padding:'9px 0', borderBottom:'1px solid '+C.lineSoft } },
+      h('span',{ style:{ fontSize:'13.5px', color:C.sub } }, k),
+      h('span',{ style:{ fontFamily:this.mono, fontSize:'13.5px', color:C.ink, fontWeight:500, textAlign:'right' } }, v));
+    return h('div',{ style:{ flex:'1', padding:'clamp(28px,5vh,56px) clamp(16px,4vw,34px) 44px', display:'flex', justifyContent:'center' } },
+      h('div',{ style:{ width:'100%', maxWidth:'960px' } },
+        h('div',{ style:{ fontFamily:this.mono, fontSize:'12px', letterSpacing:'.16em', textTransform:'uppercase', color:C.A, marginBottom:'12px' } }, 'Summary'),
+        h('h1',{ style:{ fontFamily:this.serif, fontSize:'clamp(28px,4vw,42px)', fontWeight:400, margin:'0 0 28px', color:C.ink } }, 'Your bottle estimate'),
+        h('div',{ style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'28px', alignItems:'start' } },
+          h('div',null,
+            h('div',{ style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px', marginBottom:'24px' } },
+              this.bigStat('Glass weight', this.fmt(e.weightG)+' g', C),
+              this.bigStat('Est. price', this.money(e.costUSD), C, true),
+              this.bigStat('Fill capacity', this.fmt(e.fillMl)+' ml', C),
+              this.bigStat('Overall height', this.fmt(e.overallHeightCm*10)+' mm', C)
+            ),
+            h('div',{ style:{ background:C.card, border:'1px solid '+C.line, borderRadius:'4px', padding:'20px 22px' } },
+              row('Closure', this.CLOSURES.find(c=>c.key===this.state.closure).label),
+              row('Finish', obj.finish),
+              row('Shape', this.state.shape),
+              row('Material', this.MATERIALS.find(m=>m.key===this.state.material).label),
+              row('Target capacity', this.state.capacity+' ml'),
+              row('Order quantity', this.fmt(this.state.quantity)),
+              row('All-in / bottle', this.money(e.order.unitAllIn)),
+              row('Order total', this.money(e.order.totalOrder))
+            ),
+            h('p',{ style:{ display:'flex', gap:'8px', fontSize:'12.5px', color:C.warn, marginTop:'16px', lineHeight:1.5 } },
+              h('span',null,'\u25B2'), h('span',null,obj.disclaimer))
+          ),
+          h('div',null,
+            h('div',{ style:{ fontSize:'12.5px', fontWeight:600, color:C.sub, marginBottom:'10px', letterSpacing:'.02em' } }, 'Spec payload (handoff JSON)'),
+            h('pre',{ style:{ margin:0, background:C.stageBg, color:'#D6D2C8', borderRadius:'4px', padding:'18px',
+              fontFamily:this.mono, fontSize:'11.5px', lineHeight:1.55, overflow:'auto', maxHeight:'380px' } },
+              JSON.stringify(obj,null,2)),
+            h('div',{ style:{ display:'flex', gap:'10px', flexWrap:'wrap', marginTop:'18px' } },
+              h('button',{ 'data-press':'1', onClick:()=>this.send(),
+                style:{ flex:'1', minWidth:'150px', padding:'14px', borderRadius:'999px', background:C.ink, color:'#fff', fontSize:'14.5px', fontWeight:600 } }, 'Email estimate to sales'),
+              h('button',{ 'data-press':'1', onClick:()=>this.download(),
+                style:{ padding:'14px 20px', borderRadius:'999px', border:'1px solid '+C.line, background:'#fff', color:C.ink, fontSize:'14px', fontWeight:600 } }, 'Download .json'),
+              h('button',{ 'data-press':'1', onClick:()=>this.restart(),
+                style:{ padding:'14px 20px', borderRadius:'999px', border:'1px solid '+C.line, background:'transparent', color:C.sub, fontSize:'14px', fontWeight:500 } }, 'Start over')
+            )
+          )
+        ),
+        h('div',{ style:{ display:'flex', justifycontent:'flex-start', marginTop:'34px' } },
+          h('button',{ 'data-press':'1', onClick:()=>this.go(this.state.idx-1),
+            style:{ padding:'12px 20px', borderRadius:'999px', border:'1px solid '+C.line, background:'transparent', color:C.ink, fontSize:'14px', fontWeight:500 } }, '\u2190 Back to studio'))
+      )
+    );
+  }
+  bigStat(label, val, C, accent) {
+    const h=this.h;
+    return h('div',{ style:{ background:accent?this.C.A:C.card, border:'1px solid '+(accent?this.C.A:C.line), borderRadius:'4px', padding:'16px 18px' } },
+      h('div',{ style:{ fontSize:'11.5px', fontWeight:600, letterSpacing:'.04em', textTransform:'uppercase', color:accent?'#fff':C.sub, opacity:accent?.85:1 } }, label),
+      h('div',{ style:{ fontFamily:this.mono, fontSize:'24px', fontWeight:600, color:accent?'#fff':C.ink, marginTop:'6px', fontVariantNumeric:'tabular-nums' } }, val));
+  }
+
+  renderToast() {
+    if(!this.state.toast) return null;
+    const h=this.h, C=this.C;
+    return h('div',{ style:{ position:'fixed', bottom:'26px', left:'50%', transform:'translateX(-50%)', zIndex:60,
+      background:C.ink, color:'#fff', padding:'13px 22px', borderRadius:'999px', fontSize:'13.5px', fontWeight:500,
+      boxShadow:'0 16px 40px -12px rgba(0,0,0,.5)', animation:'bsToast .3s ease both', display:'flex', gap:'9px', alignItems:'center' } },
+      h('span',{ style:{ color:C.A } }, '\u2713'), this.state.toast);
+  }
+
+  // ===================== STUDIO (Step 04) =====================
+  screenStudio() {
+    const h=this.h, C=this.C, e=this.estimate(this.state);
+    return h('div',{ style:{ flex:'1', minHeight:0, display:'grid', gap:'0', gridTemplateColumns:'minmax(0,1fr) minmax(360px,440px)',
+      alignItems:'stretch' }, className:'bs-studio' },
+      h('style',null,'@media (max-width:1024px){.bs-studio{grid-template-columns:1fr !important;overflow:visible}.bs-stage,.bs-rail{min-height:0}}@media (min-width:1025px){.bs-studio{overflow:hidden}.bs-stage{min-height:0 !important;overflow:hidden}.bs-rail{min-height:0 !important;overflow:hidden}}'),
+      this.renderStage(e),
+      this.renderRail(e)
+    );
+  }
+
+  // ---------- STAGE ----------
+  buildProfile() {
+    const d=this.state.dimensions, S=this.STAGE_SCALE;
+    const rM=d.mouth/2*S, rN=d.neckWidth/2*S, rS=d.shoulderWidth/2*S, rB=d.baseWidth/2*S;
+    const maxR=Math.max(rM,rN,rS,rB);
+    const sidePad=128, top=46;
+    const viewW=2*(maxR+sidePad), cx=viewW/2;
+    const tPx=d.wallThickness*S;
+    const pts=[]; let y=top;
+    const seg=(rTop,rBot,hCm,kind,extra)=>{
+      const hPx=hCm*S, n=Math.max(2,Math.round(hPx/8));
+      for(let i=0;i<=n;i++){ const tt=i/n; pts.push({ y:y+tt*hPx, r:this.profR(rTop,rBot,tt,kind,extra) }); }
+      y+=hPx;
+    };
+    const yMouthMid=y+d.finishHeight*S/2;
+    seg(rM,rM,d.finishHeight,'straight');
+    const yFinishBot=y;
+    // transition finish->neck (short)
+    pts.push({ y, r:rN });
+    const yNeckMid=y+d.neck*S/2;
+    seg(rN,rN,d.neck,'straight');
+    const yNeckBot=y;
+    seg(rN,rS,d.shoulderHeight,'shoulder',d.shoulderRadius);
+    const yShoulderBot=y, ySdrTop=yNeckBot;
+    seg(rS,rB,d.body,'body',this.state.wall);
+    const yBodyBot=y;
+    // heel corner
+    const cr=(0.12+0.5*d.heelRadius)*Math.min(rB,S*1.4);
+    const hn=8;
+    for(let i=1;i<=hn;i++){ const th=(i/hn)*(Math.PI/2); pts.push({ y:yBodyBot+cr*Math.sin(th), r:rB-cr+cr*Math.cos(th) }); }
+    const yBase=yBodyBot+cr;
+    return { pts, cx, viewW, viewH:yBase+58, S, tPx, rM,rN,rS,rB,
+      yFinishBot, yNeckBot, yShoulderBot, yBodyBot, yBase, top, ySdrTop,
+      yMouthMid, yNeckMid };
+  }
+  profR(a,b,t,kind,extra) {
+    const L=(x,y,k)=>x+(y-x)*k;
+    if(kind==='shoulder'){ const sr=extra; const e=L(t, 1-(1-t)*(1-t), sr); return L(a,b,e); }
+    if(kind==='body'){ const bulge=(extra||0)*0.12*this.STAGE_SCALE; return L(a,b,t)+bulge*Math.sin(Math.PI*t); }
+    return L(a,b,t);
+  }
+  pathFrom(pts, cx, yBase) {
+    let s='M '+(cx+pts[0].r).toFixed(2)+' '+pts[0].y.toFixed(2);
+    for(let i=1;i<pts.length;i++) s+=' L '+(cx+pts[i].r).toFixed(2)+' '+pts[i].y.toFixed(2);
+    s+=' L '+cx.toFixed(2)+' '+yBase.toFixed(2);
+    for(let i=pts.length-1;i>=0;i--) s+=' L '+(cx-pts[i].r).toFixed(2)+' '+pts[i].y.toFixed(2);
+    s+=' Z'; return s;
+  }
+  innerPath(pts, cx, tPx, yBase) {
+    const ip=pts.filter(p=>p.r-tPx>2).map(p=>({ y:p.y, r:p.r-tPx }));
+    if(ip.length<2) return null;
+    const yb=yBase-tPx;
+    let s='M '+(cx+ip[0].r).toFixed(2)+' '+ip[0].y.toFixed(2);
+    for(let i=1;i<ip.length;i++) s+=' L '+(cx+ip[i].r).toFixed(2)+' '+ip[i].y.toFixed(2);
+    s+=' L '+cx.toFixed(2)+' '+yb.toFixed(2);
+    for(let i=ip.length-1;i>=0;i--) s+=' L '+(cx-ip[i].r).toFixed(2)+' '+ip[i].y.toFixed(2);
+    s+=' Z'; return s;
+  }
+  renderStage(e) {
+    const h=this.h, C=this.C, lit=this.props.litStage!==false;
+    const g=this.buildProfile(); this.viewW=g.viewW;
+    const d=this.state.dimensions, disp=this.dispNow();
+    const outer=this.pathFrom(g.pts, g.cx, g.yBase);
+    const inner=this.innerPath(g.pts, g.cx, g.tPx, g.yBase);
+    const fillTop=g.ySdrTop+(1-e.fillFraction)*(g.yBase-g.ySdrTop);
+    const feas=this.feasSummary(this.state);
+    const fcol={ ok:C.ok, warn:C.warn, error:C.err }[feas.level];
+    // handles
+    const wHandles=[
+      { key:'mouth', y:g.yMouthMid, r:g.rM, label:'Mouth \u00d8' },
+      { key:'neckWidth', y:g.yNeckMid, r:g.rN, label:'Neck \u00d8' },
+      { key:'shoulderWidth', y:g.yShoulderBot, r:g.rS, label:'Shoulder \u00d8' },
+      { key:'baseWidth', y:g.yBodyBot, r:g.rB, label:'Base \u00d8' }
+    ];
+    const hHandles=[
+      { key:'finishHeight', y:(g.top+g.yFinishBot)/2, r:g.rM, label:'Finish H' },
+      { key:'neck', y:g.yNeckMid, r:g.rN, label:'Neck H' },
+      { key:'shoulderHeight', y:(g.yNeckBot+g.yShoulderBot)/2, r:(g.rN+g.rS)/2, label:'Shoulder H' },
+      { key:'body', y:(g.yShoulderBot+g.yBodyBot)/2, r:g.rS, label:'Body H' },
+      { key:'slug', y:g.yBase-4, r:g.rB*0.4, label:'Base thk' }
+    ];
+    return h('section',{ style:{ position:'relative', display:'flex', flexDirection:'column',
+      background:lit?'radial-gradient(120% 80% at 50% 22%, #23252C 0%, #16171A 62%, #101115 100%)':C.stagePanel,
+      borderRight:'1px solid '+C.stageLine, overflow:'hidden', minHeight:'520px' }, className:'bs-stage' },
+      // feasibility pill
+      h('div',{ style:{ position:'absolute', top:'18px', left:'18px', zIndex:5, maxWidth:'330px' } },
+        h('button',{ 'data-press':'1', onClick:()=>this.setState(s=>({feasOpen:!s.feasOpen})),
+          'aria-expanded':this.state.feasOpen,
+          style:{ display:'inline-flex', alignItems:'center', gap:'9px', padding:'8px 14px', borderRadius:'999px',
+            background:fcol+'22', border:'1px solid '+fcol+'66', color:fcol, fontSize:'13px', fontWeight:600 } },
+          h('span',{ style:{ fontFamily:this.mono } }, feas.glyph), feas.text,
+          h('span',{ style:{ fontSize:'10px', opacity:.7, transform:this.state.feasOpen?'rotate(180deg)':'none', transition:'transform .2s' } }, '\u25BE')),
+        this.state.feasOpen && feas.list.length ? h('div',{ style:{ marginTop:'8px', background:C.stagePanel, border:'1px solid '+C.stageLine,
+          borderRadius:'6px', padding:'10px 12px', display:'flex', flexDirection:'column', gap:'8px', boxShadow:'0 18px 40px -16px rgba(0,0,0,.6)' } },
+          feas.list.map((x,i)=>{ const cc={ok:C.ok,warn:C.warn,error:C.err,info:C.stageSub}[x.level==='error'?'error':x.level==='warn'?'warn':'info'];
+            const gl={ error:'\u2715', warn:'!', info:'i' }[x.level];
+            return h('div',{ key:i, style:{ display:'flex', gap:'9px', fontSize:'12px', color:C.stageInk, lineHeight:1.45 } },
+              h('span',{ style:{ color:cc, fontFamily:this.mono, fontWeight:700, flex:'0 0 auto', marginTop:'1px' } }, gl),
+              h('div',{ style:{ display:'flex', flexDirection:'column', gap:'6px', alignItems:'flex-start' } },
+                h('span',null, x.msg),
+                x.fix ? h('button',{ 'data-press':'1', type:'button', onClick:()=>this.goFix(x.fix),
+                  style:{ display:'inline-flex', alignItems:'center', gap:'6px', padding:'4px 10px', borderRadius:'999px',
+                    border:'1px solid '+cc+'66', background:cc+'1F', color:cc, fontSize:'11px', fontWeight:600, cursor:'pointer' } },
+                  h('span',{ style:{ fontWeight:700 } }, '\u2192'), x.fix.hint) : null
+              )); })
+        ) : this.state.feasOpen ? h('div',{ style:{ marginTop:'8px', background:C.stagePanel, border:'1px solid '+C.stageLine, borderRadius:'6px', padding:'10px 12px', fontSize:'12px', color:C.stageSub } }, 'No flags \u2014 fully buildable.') : null
+      ),
+      // footprint card
+      h('div',{ style:{ position:'absolute', top:'18px', right:'18px', zIndex:5 } }, this.renderFootprint()),
+      // SVG
+      h('div',{ style:{ flex:'1', display:'grid', placeItems:'center', padding:'34px 18px 18px', minHeight:0 } },
+        h('svg',{ ref:el=>this._svg=el, viewBox:'0 0 '+g.viewW+' '+g.viewH, style:{ width:'auto', height:'100%', maxHeight:'min(72vh,640px)', maxWidth:'100%', overflow:'visible', touchAction:'none' } },
+          h('defs',null,
+            inner?h('clipPath',{ id:'bsInner' }, h('path',{ d:inner })):null,
+            h('linearGradient',{ id:'bsGlass', x1:'0', y1:'0', x2:'1', y2:'0' },
+              h('stop',{ offset:'0', stopColor:lit?'#3A3D45':'#D9D4C9' }),
+              h('stop',{ offset:'.42', stopColor:lit?'#52555E':'#ECE7DC' }),
+              h('stop',{ offset:'.58', stopColor:lit?'#6A6E78':'#F4F0E7' }),
+              h('stop',{ offset:'1', stopColor:lit?'#2C2F36':'#CFC9BC' })),
+            h('linearGradient',{ id:'bsLiq', x1:'0', y1:'0', x2:'0', y2:'1' },
+              h('stop',{ offset:'0', stopColor:C.A, stopOpacity:.5 }),
+              h('stop',{ offset:'1', stopColor:C.A, stopOpacity:.78 }))
+          ),
+          // contact shadow
+          h('ellipse',{ cx:g.cx, cy:g.yBase+20, rx:g.rB*1.05, ry:12, fill:lit?'#000':'#000', opacity:lit?.5:.12 }),
+          // body
+          h('path',{ d:outer, fill:'url(#bsGlass)', stroke:lit?'#0C0D10':'#B7B1A4', strokeWidth:1.4, strokeLinejoin:'round' }),
+          // liquid fill (clipped)
+          inner?h('g',{ clipPath:'url(#bsInner)' },
+            h('rect',{ x:g.cx-g.rS-20, y:fillTop, width:(g.rS+20)*2, height:g.yBase-fillTop+4, fill:'url(#bsLiq)' }),
+            h('line',{ x1:g.cx-g.rS-20, y1:fillTop, x2:g.cx+g.rS+20, y2:fillTop, stroke:C.A, strokeWidth:1.2, strokeOpacity:.9 })
+          ):null,
+          // inner wall dashed
+          inner?h('path',{ d:inner, fill:'none', stroke:lit?'#9AA0AD':'#9A9183', strokeWidth:.9, strokeDasharray:'3 3', strokeOpacity:.55 }):null,
+          // mould seam
+          h('line',{ x1:g.cx, y1:g.top-4, x2:g.cx, y2:g.yBase, stroke:lit?'#FFFFFF':'#888', strokeWidth:.7, strokeDasharray:'2 5', strokeOpacity:lit?.28:.4 }),
+          // punt
+          d.punt>0.05?h('path',{ d:'M '+(g.cx-g.rB*0.55)+' '+g.yBase+' Q '+g.cx+' '+(g.yBase-d.punt*g.S*0.9)+' '+(g.cx+g.rB*0.55)+' '+g.yBase, fill:'none', stroke:lit?'#9AA0AD':'#9A9183', strokeWidth:.9, strokeDasharray:'3 3', strokeOpacity:.55 }):null,
+          // overall dimension bracket
+          this.dimBracket(g, disp, lit),
+          // handles
+          wHandles.map(hd=>this.handle(hd,'width',g,lit)),
+          hHandles.map(hd=>this.handle(hd,'height',g,lit))
+        )
+      ),
+      // DOCK
+      this.renderDock(e, lit)
+    );
+  }
+  dimBracket(g, disp, lit) {
+    const h=this.h, C=this.C;
+    const x=g.cx-g.rS-46, val=this.fmt(disp.overallHeightCm*(this.state.units==='mm'?10:1), this.state.units==='mm'?0:1)+' '+this.state.units;
+    const col=lit?C.stageSub:C.sub;
+    return h('g',{ stroke:col, strokeWidth:1 },
+      h('line',{ x1:x, y1:g.top, x2:x, y2:g.yBase }),
+      h('line',{ x1:x-4, y1:g.top, x2:x+4, y2:g.top }),
+      h('line',{ x1:x-4, y1:g.yBase, x2:x+4, y2:g.yBase }),
+      h('text',{ x:x-8, y:(g.top+g.yBase)/2, fill:col, stroke:'none', fontSize:'11', fontFamily:this.mono,
+        textAnchor:'middle', transform:'rotate(-90 '+(x-8)+' '+(g.top+g.yBase)/2+')' }, 'OVERALL '+val)
+    );
+  }
+  handle(hd, axis, g, lit) {
+    const h=this.h, C=this.C;
+    const x=axis==='width'? g.cx+hd.r : g.cx-hd.r-(hd.key==='slug'?0:0);
+    const y=hd.y;
+    const r=this.RANGES[hd.key];
+    const dispV=this.fmt(this.toDisp(this.state.dimensions[hd.key]), this.state.units==='mm'?0:1)+' '+this.state.units;
+    const lx = axis==='width'? x+14 : x-14;
+    const anchor = axis==='width'?'start':'end';
+    return h('g',{ key:axis+hd.key, 'data-handle':'1', tabIndex:0, role:'slider',
+      'aria-label':hd.label, 'aria-valuemin':r[0], 'aria-valuemax':r[1], 'aria-valuenow':this.state.dimensions[hd.key],
+      'aria-valuetext':dispV, style:{ cursor:axis==='width'?'ew-resize':'ns-resize' },
+      onPointerDown:e=>this.beginDrag(hd.key,axis,e), onKeyDown:e=>this.onHandleKey(hd.key,e) },
+      h('circle',{ cx:x, cy:y, r:18, fill:'transparent' }),
+      h('line',{ x1:axis==='width'?x-7:x, y1:axis==='width'?y:y-7, x2:axis==='width'?x+7:x, y2:axis==='width'?y:y+7, stroke:C.A, strokeWidth:2, strokeLinecap:'round', opacity:.0 }),
+      h('circle',{ cx:x, cy:y, r:6, fill:C.A, stroke:lit?'#15161A':'#fff', strokeWidth:2 }),
+      h('g',{ className:'bs-hlabel' },
+        h('rect',{ x:axis==='width'?lx-2:lx-(dispV.length*6.0+8), y:y-9, width:dispV.length*6.0+10, height:18, rx:4, fill:lit?'#000':'#fff', opacity:lit?.55:.85 }),
+        h('text',{ x:lx, y:y+3.5, fill:lit?C.stageInk:C.ink, fontSize:'10.5', fontFamily:this.mono, textAnchor:anchor }, dispV)
+      )
+    );
+  }
+  renderFootprint() {
+    const h=this.h, C=this.C, lit=this.props.litStage!==false, d=this.state.dimensions, k=this.depthRatio(this.state);
+    const w=d.shoulderWidth, dep=w*k, t=d.wallThickness;
+    const box=86, scale=(box-18)/Math.max(w,dep), W=w*scale, D=dep*scale, cx=box/2, cy=box/2;
+    const shape=this.state.shape;
+    const ringProps={ fill:'none', stroke:lit?C.stageInk:C.ink, strokeWidth:1.4 };
+    const innerProps={ fill:'none', stroke:lit?C.stageSub:C.sub, strokeWidth:.9, strokeDasharray:'2 2' };
+    const boreR=d.bore/2*scale;
+    let outer, innr;
+    const off=t*scale;
+    if(shape==='round'||shape==='oval'){ outer=h('ellipse',{cx,cy,rx:W/2,ry:D/2,...ringProps}); innr=h('ellipse',{cx,cy,rx:W/2-off,ry:D/2-off,...innerProps}); }
+    else if(shape==='square'){ outer=h('rect',{x:cx-W/2,y:cy-D/2,width:W,height:D,rx:3,...ringProps}); innr=h('rect',{x:cx-W/2+off,y:cy-D/2+off,width:W-2*off,height:D-2*off,rx:2,...innerProps}); }
+    else { const pts=(rx,ry)=>[[0,-ry],[rx*0.87,-ry/2],[rx*0.87,ry/2],[0,ry],[-rx*0.87,ry/2],[-rx*0.87,-ry/2]].map(p=>(cx+p[0])+','+(cy+p[1])).join(' ');
+      outer=h('polygon',{points:pts(W/2,D/2),...ringProps}); innr=h('polygon',{points:pts(W/2-off,D/2-off),...innerProps}); }
+    return h('div',{ style:{ background:lit?'#000000'+'66':C.card, border:'1px solid '+(lit?C.stageLine:C.line), borderRadius:'6px', padding:'10px 12px', backdropFilter:'blur(4px)', width:'130px' } },
+      h('div',{ style:{ fontSize:'10px', fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase', color:lit?C.stageSub:C.sub, marginBottom:'6px' } }, 'Footprint'),
+      h('svg',{ viewBox:'0 0 '+box+' '+box, style:{ width:'100%', height:box+'px', display:'block' } },
+        outer, innr, h('circle',{ cx, cy, r:Math.max(2,boreR), fill:lit?C.stageLine:C.lineSoft, stroke:lit?C.stageSub:C.faint, strokeWidth:.8 })),
+      h('div',{ style:{ fontFamily:this.mono, fontSize:'10.5px', color:lit?C.stageInk:C.ink, textAlign:'center', marginTop:'4px' } },
+        this.fmt(this.toDisp(w),this.state.units==='mm'?0:1)+' \u00d7 '+this.fmt(this.toDisp(dep),this.state.units==='mm'?0:1)+' '+this.state.units)
+    );
+  }
+  renderDock(e, lit) {
+    const h=this.h, C=this.C, disp=this.dispNow();
+    const cell=(label,val,sub)=>h('div',{ style:{ display:'flex', flexDirection:'column', gap:'2px', minWidth:0 } },
+      h('span',{ style:{ fontSize:'10px', fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase', color:lit?C.stageSub:C.sub } }, label),
+      h('span',{ style:{ fontFamily:this.mono, fontSize:'18px', fontWeight:600, color:lit?C.stageInk:C.ink, fontVariantNumeric:'tabular-nums', whiteSpace:'nowrap' } }, val),
+      sub?h('span',{ style:{ fontSize:'10px', color:lit?C.stageSub:C.faint, fontFamily:this.mono } }, sub):null);
+    const u=this.state.units, cv=v=>u==='mm'?v*10:v;
+    return h('div',{ className:'bs-dock', style:{ borderTop:'1px solid '+C.stageLine, background:lit?'#101115EE':C.card,
+      backdropFilter:'blur(8px)', padding:'14px clamp(16px,3vw,26px)', display:'flex', alignItems:'center', gap:'22px', flexWrap:'wrap' } },
+      h('style',null,'@media (max-width:600px){.bs-dock{gap:14px}.bs-metrics{grid-template-columns:1fr 1fr !important}}'),
+      h('div',{ className:'bs-metrics', style:{ display:'grid', gridTemplateColumns:'repeat(4,auto)', gap:'18px 26px', flex:'1' } },
+        cell('Overall', this.fmt(cv(disp.overallHeightCm), u==='mm'?0:1)+' '+u),
+        cell('Fill', this.fmt(disp.fillMl,0)+' ml', 'brimful '+this.fmt(disp.brimfulMl,0)),
+        cell('Weight', this.fmt(disp.weightG,0)+' g'),
+        cell('g / ml', disp.ratio.toFixed(3), 'lightweighting')
+      ),
+      h('div',{ style:{ borderLeft:'1px solid '+C.stageLine, paddingLeft:'22px', display:'flex', flexDirection:'column', gap:'2px' } },
+        h('span',{ style:{ fontSize:'10px', fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase', color:C.A } }, 'Est. price'),
+        h('span',{ style:{ fontFamily:this.mono, fontSize:'26px', fontWeight:700, color:lit?'#fff':C.ink, fontVariantNumeric:'tabular-nums' } }, this.money(disp.priceUSD)),
+        h('span',{ style:{ fontSize:'10px', color:lit?C.stageSub:C.faint } }, 'per bottle \u00b7 placeholder')
+      )
+    );
+  }
+
+  // ---------- RAIL ----------
+  renderRail(e) {
+    const h=this.h, C=this.C;
+    const tabs=[ {k:'size',l:'Size'},{k:'finish',l:'Finish'},{k:'base',l:'Base'},{k:'production',l:'Production'} ];
+    return h('aside',{ style:{ display:'flex', flexDirection:'column', background:C.paper, minHeight:0 }, className:'bs-rail' },
+      // presets + simple/advanced
+      h('div',{ style:{ padding:'18px clamp(16px,2.4vw,22px) 14px', borderBottom:'1px solid '+C.line } },
+        h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' } },
+          h('span',{ style:{ fontFamily:this.serif, fontSize:'18px', color:C.ink } }, 'Refine the glass'),
+          h('div',{ style:{ display:'inline-flex', border:'1px solid '+C.line, borderRadius:'999px', overflow:'hidden' } },
+            [['simple','Simple',false],['advanced','Advanced',true]].map(([id,l,adv])=>h('button',{ key:id, 'data-press':'1',
+              onClick:()=>this.setState({advanced:adv}),
+              style:{ padding:'6px 13px', fontSize:'12px', fontWeight:600, color:this.state.advanced===adv?'#fff':C.sub,
+                background:this.state.advanced===adv?C.ink:'transparent' } }, l)))
+        ),
+        h('div',{ style:{ display:'flex', gap:'7px', flexWrap:'wrap' } },
+          this.PRESETS.map(p=>h('button',{ key:p.key, 'data-press':'1', onClick:()=>this.applyPreset(p),
+            style:{ padding:'7px 12px', borderRadius:'999px', border:'1px solid '+C.line, background:C.card,
+              fontSize:'12px', color:C.ink, fontWeight:500 } }, p.label)))
+      ),
+      // tabs
+      h('div',{ style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderBottom:'1px solid '+C.line, background:C.paper, position:'sticky', top:0, zIndex:2 } },
+        tabs.map(t=>{ const a=this.state.activeTab===t.k; return h('button',{ key:t.k, 'data-press':'1', onClick:()=>this.setState({activeTab:t.k}),
+          style:{ padding:'13px 4px', fontSize:'13px', fontWeight:a?700:500, color:a?C.ink:C.sub,
+            borderBottom:'2px solid '+(a?C.A:'transparent'), background:'transparent' } }, t.l); })
+      ),
+      // scrolling body
+      h('div',{ style:{ flex:'1', overflowY:'auto', padding:'18px clamp(16px,2.4vw,22px) 20px' } },
+        this.renderTabBody(e)
+      ),
+      // pinned footer
+      h('div',{ style:{ borderTop:'1px solid '+C.line, padding:'14px clamp(16px,2.4vw,22px)', display:'flex', gap:'10px', background:C.paper } },
+        h('button',{ 'data-press':'1', onClick:()=>this.matchCapacity(),
+          style:{ flex:'1', padding:'12px', borderRadius:'999px', border:'1px solid '+C.line, background:'#fff', color:C.ink, fontSize:'13.5px', fontWeight:600 } }, 'Match '+this.state.capacity+' ml'),
+        h('button',{ 'data-press':'1', onClick:()=>this.go(this.state.idx+1),
+          style:{ flex:'1', padding:'12px', borderRadius:'999px', background:C.ink, color:'#fff', fontSize:'13.5px', fontWeight:600 } }, 'Material \u2192')
+      )
+    );
+  }
+  renderTabBody(e) {
+    const t=this.state.activeTab;
+    if(t==='size') return this.tabSize();
+    if(t==='finish') return this.tabFinish();
+    if(t==='base') return this.tabBase();
+    return this.tabProduction(e);
+  }
+
+  goFix(fix) {
+    if(!fix) return;
+    if(fix.action==='match'){ this.setState({ activeTab:fix.tab||'size', feasOpen:false }); this.matchCapacity(); return; }
+    const patch={ activeTab:fix.tab, feasOpen:false };
+    if(fix.adv) patch.advanced=true;
+    this.setState(patch);
+    this.flash(fix.hint);
+    try { const rail=document.querySelector('.bs-rail'); if(rail && window.innerWidth<=1024){ const top=rail.getBoundingClientRect().top+window.scrollY-12; window.scrollTo({ top, behavior:this.reduced()?'auto':'smooth' }); } } catch(err){}
+  }
+  helpDot(key) {
+    const h=this.h, C=this.C, txt=this.HELP[key];
+    if(!txt) return null;
+    const show=(e)=>{ const r=e.currentTarget.getBoundingClientRect(); this.setState({ tip:{ text:txt, x:r.left+r.width/2, y:r.top } }); };
+    const hide=()=>this.setState({ tip:null });
+    return h('button',{ 'data-press':'1', 'aria-label':'What does this control do?', type:'button',
+      onMouseEnter:show, onMouseLeave:hide, onFocus:show, onBlur:hide,
+      onClick:(e)=>{ e.preventDefault(); const open=this.state.tip&&this.state.tip.text===txt; if(open) this.setState({tip:null}); else show(e); },
+      style:{ width:'15px', height:'15px', borderRadius:'50%', border:'1px solid '+C.line, color:C.faint,
+        fontSize:'9.5px', fontWeight:700, display:'inline-grid', placeItems:'center', lineHeight:1, flex:'0 0 auto', cursor:'help' } }, '?');
+  }
+  renderTip() {
+    if(!this.state.tip) return null;
+    const h=this.h, C=this.C, t=this.state.tip;
+    const vw=(typeof window!=='undefined'?window.innerWidth:1200);
+    const x=this.clamp(t.x, 126, vw-126);
+    return h('div',{ role:'tooltip', style:{ position:'fixed', left:x+'px', top:(t.y-10)+'px', transform:'translate(-50%,-100%)',
+      width:'234px', maxWidth:'74vw', background:C.ink, color:'#F4F0E7', padding:'11px 13px', borderRadius:'9px',
+      fontSize:'12px', lineHeight:1.5, zIndex:90, boxShadow:'0 18px 44px -12px rgba(0,0,0,.55)', pointerEvents:'none',
+      fontFamily:'\'Hanken Grotesk\',sans-serif', fontWeight:400 } },
+      t.text,
+      h('span',{ style:{ position:'absolute', bottom:'-5px', left:'50%', transform:'translateX(-50%) rotate(45deg)', width:'10px', height:'10px', background:C.ink } })
+    );
+  }
+  // control widgets
+  numRow(key, label, opts={}) {
+    const h=this.h, C=this.C, r=this.RANGES[key], st=this.STEPS[key];
+    const u=this.state.units, cm=u==='mm', uf=cm?10:1;
+    const v=this.state.dimensions[key];
+    const dispV=this.toDisp(v);
+    const dec = cm ? 0 : 2;
+    const set=(nv)=>this.setDim(key, this.fromDisp(nv));
+    return h('div',{ key, style:{ marginBottom:'16px' } },
+      h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'7px' } },
+        h('span',{ style:{ display:'inline-flex', alignItems:'center', gap:'6px' } },
+          h('span',{ style:{ fontSize:'13.5px', fontWeight:500, color:C.ink } }, label), this.helpDot(key)),
+        opts.tag?h('span',{ style:{ fontFamily:this.mono, fontSize:'10px', color:C.faint } }, opts.tag):null),
+      h('div',{ style:{ display:'flex', alignItems:'stretch', border:'1px solid '+C.line, borderRadius:'6px', overflow:'hidden', background:'#fff' } },
+        h('button',{ 'data-press':'1', 'aria-label':'decrease', onClick:()=>set(this.toDisp(this.clamp(v-st,r[0],r[1]))),
+          style:{ width:'40px', fontSize:'18px', color:C.sub, borderRight:'1px solid '+C.line } }, '\u2212'),
+        h('input',{ type:'number', value:Math.round(dispV*100)/100, step:st*uf,
+          onChange:ev=>{ const nv=parseFloat(ev.target.value); if(!isNaN(nv)) set(nv); },
+          style:{ flex:'1', minWidth:0, textAlign:'center', border:'none', fontFamily:this.mono, fontSize:'15px', color:C.ink, padding:'10px 4px', fontVariantNumeric:'tabular-nums' } }),
+        h('span',{ style:{ display:'grid', placeItems:'center', padding:'0 10px', fontFamily:this.mono, fontSize:'11px', color:C.faint, borderLeft:'1px solid '+C.line } }, u),
+        h('button',{ 'data-press':'1', 'aria-label':'increase', onClick:()=>set(this.toDisp(this.clamp(v+st,r[0],r[1]))),
+          style:{ width:'40px', fontSize:'18px', color:C.sub, borderLeft:'1px solid '+C.line } }, '+')
+      )
+    );
+  }
+  sliderRow(key, label, fmtFn, opts={}) {
+    const h=this.h, C=this.C, r=this.RANGES[key], st=this.STEPS[key], v=this.state.dimensions[key];
+    return h('div',{ key, style:{ marginBottom:'18px' } },
+      h('div',{ style:{ display:'flex', justifyContent:'space-between', marginBottom:'8px' } },
+        h('span',{ style:{ display:'inline-flex', alignItems:'center', gap:'6px' } },
+          h('span',{ style:{ fontSize:'13.5px', fontWeight:500, color:C.ink } }, label), this.helpDot(key)),
+        h('span',{ style:{ fontFamily:this.mono, fontSize:'12.5px', color:C.A, fontWeight:600 } }, fmtFn(v))),
+      h('input',{ type:'range', min:r[0], max:r[1], step:st, value:v,
+        onChange:ev=>this.setDim(key, parseFloat(ev.target.value)), style:{ width:'100%' } }),
+      opts.ends?h('div',{ style:{ display:'flex', justifyContent:'space-between', fontSize:'10.5px', color:C.faint, marginTop:'4px' } },
+        h('span',null,opts.ends[0]), h('span',null,opts.ends[1])):null
+    );
+  }
+  wallSlider() {
+    const h=this.h, C=this.C, v=this.state.wall;
+    return h('div',{ style:{ marginBottom:'18px' } },
+      h('div',{ style:{ display:'flex', justifyContent:'space-between', marginBottom:'8px' } },
+        h('span',{ style:{ display:'inline-flex', alignItems:'center', gap:'6px' } },
+          h('span',{ style:{ fontSize:'13.5px', fontWeight:500, color:C.ink } }, 'Wall profile'), this.helpDot('wall')),
+        h('span',{ style:{ fontFamily:this.mono, fontSize:'12.5px', color:C.A, fontWeight:600 } }, v===0?'straight':v>0?'+'+v.toFixed(2)+' convex':v.toFixed(2)+' concave')),
+      h('input',{ type:'range', min:-1, max:1, step:0.05, value:v,
+        onChange:ev=>this.setField({wall:parseFloat(ev.target.value)}), style:{ width:'100%' } }),
+      h('div',{ style:{ display:'flex', justifyContent:'space-between', fontSize:'10.5px', color:C.faint, marginTop:'4px' } },
+        h('span',null,'concave'), h('span',null,'convex'))
+    );
+  }
+  tabSize() {
+    const h=this.h, adv=this.state.advanced;
+    return h('div',null,
+      this.numRow('shoulderWidth','Body \u00d8 (at shoulder)',{tag:'drag \u2194'}),
+      this.numRow('body','Body height',{tag:'drag \u2195'}),
+      this.numRow('baseWidth','Base \u00d8',{tag:'drag \u2194'}),
+      adv?h('div',null,
+        this.state.shape==='oval'?this.numRow('bodyDepth','Body depth (Y)'):null,
+        this.numRow('shoulderHeight','Shoulder height',{tag:'drag \u2195'}),
+        this.sliderRow('shoulderRadius','Shoulder roundness',v=>v.toFixed(2),{ends:['sharp','round']}),
+        this.wallSlider(),
+        this.numRow('wallThickness','Wall thickness')
+      ):this.hintMore()
+    );
+  }
+  tabFinish() {
+    const h=this.h, C=this.C, adv=this.state.advanced;
+    const cur=this.state.finish;
+    return h('div',null,
+      h('div',{ style:{ fontSize:'12.5px', fontWeight:600, color:C.sub, marginBottom:'9px' } }, 'Standard finish'),
+      h('div',{ style:{ display:'flex', flexDirection:'column', gap:'7px', marginBottom:'18px' } },
+        this.FINISHES.map(f=>{ const a=cur===f.key, compat=f.closures.includes(this.state.closure);
+          return h('button',{ key:f.key, 'data-press':'1', onClick:()=>this.setFinish(f.key),
+            style:{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'11px 13px', borderRadius:'6px',
+              border:'1px solid '+(a?C.A:C.line), background:a?'#fff':C.card, textAlign:'left' } },
+            h('span',null,
+              h('div',{ style:{ fontSize:'13.5px', fontWeight:600, color:C.ink } }, f.name+'  ',
+                !compat?h('span',{ style:{ color:C.warn, fontSize:'11px' } }, ' ! closure'):null),
+              h('div',{ style:{ fontSize:'11px', color:C.sub } }, f.style+' \u00b7 '+f.std)),
+            h('span',{ style:{ fontFamily:this.mono, fontSize:'10.5px', color:C.faint, textAlign:'right' } }, 'T'+f.T+' I'+f.I)
+          ); })
+      ),
+      this.numRow('mouth','Thread \u00d8 (T)',{tag:'drag \u2194'}),
+      this.numRow('finishHeight','Finish height (H)',{tag:'drag \u2195'}),
+      this.numRow('neckWidth','Neck \u00d8',{tag:'drag \u2194'}),
+      this.numRow('neck','Neck height',{tag:'drag \u2195'}),
+      adv?this.numRow('bore','Bore / throat \u00d8 (I)'):this.hintMore()
+    );
+  }
+  tabBase() {
+    const h=this.h, adv=this.state.advanced;
+    return h('div',null,
+      this.numRow('baseWidth','Base \u00d8',{tag:'drag \u2194'}),
+      this.numRow('slug','Base glass thickness',{tag:'drag \u2195'}),
+      this.sliderRow('heelRadius','Heel roundness',v=>v.toFixed(2),{ends:['sharp','round']}),
+      this.numRow('punt','Push-up (punt) depth'),
+      adv?null:this.hintMore()
+    );
+  }
+  tabProduction(e) {
+    const h=this.h, C=this.C, adv=this.state.advanced;
+    const seg=(label,opts,val,onPick,helpKey)=>h('div',{ style:{ marginBottom:'16px' } },
+      h('div',{ style:{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12.5px', fontWeight:600, color:C.sub, marginBottom:'8px' } }, label, helpKey?this.helpDot(helpKey):null),
+      h('div',{ style:{ display:'flex', gap:'6px', flexWrap:'wrap' } },
+        opts.map(o=>h('button',{ key:o.v, 'data-press':'1', onClick:()=>onPick(o.v),
+          style:{ padding:'8px 12px', borderRadius:'999px', border:'1px solid '+(val===o.v?C.A:C.line),
+            background:val===o.v?'#fff':C.card, color:val===o.v?C.A:C.sub, fontSize:'12.5px', fontWeight:600 } }, o.l))));
+    const ro=(label,val)=>h('div',{ style:{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid '+C.lineSoft } },
+      h('span',{ style:{ fontSize:'12.5px', color:C.sub } }, label),
+      h('span',{ style:{ fontFamily:this.mono, fontSize:'12.5px', color:C.ink, fontWeight:500 } }, val));
+    const u=this.state.units, cv=v=>u==='mm'?v*10:v;
+    return h('div',null,
+      seg('Fill type', this.FILLTYPES.map(f=>({v:f.key,l:f.label})), this.state.fillType, v=>this.setFill(v), 'fillType'),
+      seg('Material', this.MATERIALS.map(m=>({v:m.key,l:m.label})), this.state.material, v=>this.setField({material:v}), 'material'),
+      adv?seg('Forming process', [{v:'bb',l:'Blow\u2013Blow'},{v:'nnpb',l:'Press\u2013Blow / NNPB'}], this.state.process, v=>this.setField({process:v}), 'process'):null,
+      adv?this.sliderRow('headspace','Headspace (ullage)',v=>Math.round(v*100)+'%'):null,
+      h('div',{ style:{ marginBottom:'18px' } },
+        h('div',{ style:{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12.5px', fontWeight:600, color:C.sub, marginBottom:'8px' } }, 'Order quantity', this.helpDot('quantity')),
+        h('input',{ type:'number', value:this.state.quantity, min:1,
+          onChange:ev=>this.setField({quantity:Math.max(1,parseInt(ev.target.value||'1',10))}),
+          style:{ width:'100%', padding:'11px 13px', borderRadius:'6px', border:'1px solid '+C.line, background:'#fff', fontFamily:this.mono, fontSize:'15px', color:C.ink } })),
+      // secondary readouts
+      h('div',{ style:{ background:C.card, border:'1px solid '+C.line, borderRadius:'8px', padding:'4px 14px 10px', marginBottom:'16px' } },
+        h('div',{ style:{ fontSize:'11px', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:C.sub, padding:'12px 0 4px' } }, 'Engineering readouts'),
+        ro('Brimful', this.fmt(e.brimfulMl,0)+' ml'),
+        ro('Min wall', this.fmt(cv(e.minWallMm/10), u==='mm'?2:3)+' '+u + (e.minWallMm<1?'  !':'')),
+        ro('Wrap-label area', this.fmt(e.wrapLabelCm2,0)+' cm\u00b2'),
+        ro('Tol. height', '\u00b1'+e.tol.heightMm.toFixed(2)+' mm'),
+        ro('Tol. \u00d8', '\u00b1'+e.tol.diaMm.toFixed(2)+' mm'),
+        ro('Tol. capacity', '\u00b1'+e.tol.capPct+'%')
+      ),
+      // order summary
+      h('div',{ style:{ background:C.ink, color:'#fff', borderRadius:'8px', padding:'4px 16px 14px' } },
+        h('div',{ style:{ fontSize:'11px', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:C.A, padding:'13px 0 4px' } }, 'Order'),
+        this.orderRow('Unit cost', this.money(e.order.unitCost)),
+        this.orderRow('Tooling / unit', this.money(e.order.toolingPerUnit)),
+        this.orderRow('All-in / bottle', this.money(e.order.unitAllIn), true),
+        this.orderRow('Order total', this.money(e.order.totalOrder)),
+        e.order.belowMoq?h('div',{ style:{ display:'flex', gap:'7px', marginTop:'10px', fontSize:'11.5px', color:'#E8B45A', lineHeight:1.4 } },
+          h('span',null,'!'), 'Below MOQ of '+this.fmt(e.order.moq)+' for '+this.MATERIALS.find(m=>m.key===this.state.material).label+'.'):null
+      )
+    );
+  }
+  orderRow(label,val,big) {
+    const h=this.h;
+    return h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:big?'9px 0':'6px 0', borderTop:big?'1px solid rgba(255,255,255,.14)':'none' } },
+      h('span',{ style:{ fontSize:big?'13px':'12.5px', color:big?'#fff':'rgba(255,255,255,.7)', fontWeight:big?600:400 } }, label),
+      h('span',{ style:{ fontFamily:this.mono, fontSize:big?'17px':'13px', color:'#fff', fontWeight:big?700:500 } }, val));
+  }
+  hintMore() {
+    const h=this.h, C=this.C;
+    return h('button',{ 'data-press':'1', onClick:()=>this.setState({advanced:true}),
+      style:{ marginTop:'4px', fontSize:'12.5px', color:C.A, fontWeight:600, display:'flex', gap:'6px', alignItems:'center' } },
+      '+ Show advanced parameters');
+  }
+}
+</script>
+</body>
+</html>
