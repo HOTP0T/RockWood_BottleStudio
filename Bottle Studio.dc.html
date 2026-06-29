@@ -151,6 +151,7 @@ class Component extends DCLogic {
     contact: { email:'', phone:'' },
     closure: 'screw-cap',
     capacity: 750,
+    holdCapacity: true,
     shape: 'round',
     units: 'mm',
     advanced: false,
@@ -163,6 +164,7 @@ class Component extends DCLogic {
     wall: 0,
     dimensions: this.baseDims(),
     feasOpen: false,
+    templates: { round: this.PRESETS, oval: [], square: [], hexagonal: [] },
     toast: null,
     dragging: false,
     disp: null,
@@ -187,6 +189,7 @@ class Component extends DCLogic {
     window.addEventListener('pointermove', this._mv, { passive:false });
     window.addEventListener('pointerup', this._up);
     window.addEventListener('resize', this._rz);
+    this.loadTemplates();
   }
   componentWillUnmount() {
     window.removeEventListener('pointermove', this._mv);
@@ -195,6 +198,20 @@ class Component extends DCLogic {
     cancelAnimationFrame(this._raf);
     cancelAnimationFrame(this._mraf);
     cancelAnimationFrame(this._rzraf);
+  }
+  loadTemplates() {
+    // Per-shape template files live in ./templates/<shape>.json (see templates/README.md).
+    // Static hosting can't list a folder, so we fetch the four known shape files by name.
+    ['round','oval','square','hexagonal'].forEach(shape=>{
+      fetch('./templates/'+shape+'.json',{ cache:'no-cache' })
+        .then(r=>r.ok?r.json():null)
+        .then(list=>{
+          if(!Array.isArray(list)) return;
+          const items=list.map((t,i)=>({ ...t, shape, key:t.key||(shape+'-'+i) }));
+          this.setState(st=>({ templates:{ ...st.templates, [shape]:items } }));
+        })
+        .catch(()=>{});
+    });
   }
 
   // ================= ENGINE =================
@@ -279,7 +296,16 @@ class Component extends DCLogic {
   }
 
   // ================= STATE MUTATION =================
-  afterChange() { this.tween(); }
+  afterChange(changedKey) {
+    if(this.state.holdCapacity && changedKey!=='body' && changedKey!=='__nosolve') {
+      const best=this.solveBodyForCapacity(this.state);
+      if(Math.abs(best-this.state.dimensions.body)>1e-4){
+        this.setState(st=>({ dimensions:{...st.dimensions, body:best} }), ()=>this.tween());
+        return;
+      }
+    }
+    this.tween();
+  }
   tween() {
     const target=this.metricsFrom(this.estimate(this.state));
     if(this.reduced() || this.state.dragging) { this.setState({ disp:target }); return; }
@@ -295,31 +321,56 @@ class Component extends DCLogic {
   }
   setDim(key, val) {
     const r=this.RANGES[key]; if(r) val=this.clamp(val, r[0], r[1]);
-    this.setState(st=>({ dimensions:{...st.dimensions, [key]:val} }), ()=>this.afterChange());
+    this.setState(st=>{
+      const dm={...st.dimensions, [key]:val};
+      if(key==='mouth') dm.mouth=Math.max(dm.mouth, st.dimensions.neckWidth);
+      else if(key==='neckWidth') dm.neckWidth=Math.min(dm.neckWidth, st.dimensions.mouth);
+      return { dimensions:dm };
+    }, ()=>this.afterChange(key));
   }
   setField(patch) { this.setState(patch, ()=>this.afterChange()); }
+  setCapacity(v) { this.setState({ capacity:Math.max(10, v||0) }, ()=>this.afterChange()); }
+  toggleHold() { const next=!this.state.holdCapacity; this.setState({ holdCapacity:next }, ()=>{ if(next) this.afterChange(); }); }
   setFill(key) {
     const f=this.FILLTYPES.find(x=>x.key===key);
     this.setState(st=>({ fillType:key, dimensions:{...st.dimensions, headspace:f?f.hs:st.dimensions.headspace} }), ()=>this.afterChange());
   }
   setFinish(key) {
     const f=this.FINISHES.find(x=>x.key===key); if(!f) return;
-    this.setState(st=>({ finish:key, dimensions:{...st.dimensions, mouth:f.T, bore:f.I, finishHeight:f.H} }), ()=>this.afterChange());
+    this.setState(st=>({ finish:key, dimensions:{...st.dimensions, mouth:f.T, bore:f.I, finishHeight:f.H, neckWidth:Math.min(st.dimensions.neckWidth, f.T)} }), ()=>this.afterChange());
   }
   applyPreset(p) {
-    this.setState({ dimensions:{...p.d}, capacity:p.cap, shape:p.shape, finish:p.finish, closure:p.closure }, ()=>this.afterChange());
+    const d={ ...this.baseDims(), ...(p.d||{}) }; d.neckWidth=Math.min(d.neckWidth, d.mouth);
+    const patch={ dimensions:d };
+    if(p.cap!=null) patch.capacity=p.cap;
+    if(p.shape) patch.shape=p.shape;
+    if(p.finish) patch.finish=p.finish;
+    if(p.closure) patch.closure=p.closure;
+    this.setState(patch, ()=>this.afterChange('__nosolve'));
   }
-  matchCapacity() {
-    // solve body height so fill ~= target
-    let lo=this.RANGES.body[0], hi=this.RANGES.body[1], best=this.state.dimensions.body;
+  renderTemplates() {
+    const h=this.h, C=this.C;
+    const list=(this.state.templates && this.state.templates[this.state.shape]) || [];
+    if(!list.length) return h('div',{ style:{ fontSize:'11.5px', color:C.faint, fontStyle:'italic' } }, 'No templates for the '+this.state.shape+' shape yet — add one in templates/'+this.state.shape+'.json');
+    return h('div',{ style:{ display:'flex', gap:'7px', flexWrap:'wrap' } },
+      list.map(p=>h('button',{ key:p.key, 'data-press':'1', onClick:()=>this.applyPreset(p),
+        style:{ padding:'7px 12px', borderRadius:'999px', border:'1px solid '+C.line, background:C.card,
+          fontSize:'12px', color:C.ink, fontWeight:500 } }, p.label)));
+  }
+  solveBodyForCapacity(s) {
+    // pure: returns body height so estimate(...).fillMl ~= s.capacity, clamped to RANGES.body
+    let lo=this.RANGES.body[0], hi=this.RANGES.body[1], best=s.dimensions.body;
     for(let i=0;i<28;i++){
       const mid=(lo+hi)/2;
-      const test={...this.state, dimensions:{...this.state.dimensions, body:mid}};
+      const test={...s, dimensions:{...s.dimensions, body:mid}};
       const fill=this.estimate(test).fillMl;
-      if(fill<this.state.capacity) lo=mid; else hi=mid;
+      if(fill<s.capacity) lo=mid; else hi=mid;
       best=mid;
     }
-    this.setDim('body', best);
+    return best;
+  }
+  matchCapacity() {
+    this.setDim('body', this.solveBodyForCapacity(this.state));
     this.flash('Body height tuned to hit '+this.state.capacity+' ml');
   }
   flash(msg) {
@@ -362,7 +413,7 @@ class Component extends DCLogic {
     this.flash('Estimate sent to sales \u2014 logged for handoff');
   }
   restart() {
-    this.setState({ idx:0, contact:{email:'',phone:''}, dimensions:this.baseDims(), capacity:750,
+    this.setState({ idx:0, contact:{email:'',phone:''}, dimensions:this.baseDims(), capacity:750, holdCapacity:true,
       shape:'round', material:'flint', finish:'28-400', closure:'screw-cap', wall:0, quantity:50000,
       fillType:'spirits', process:'bb' }, ()=>this.afterChange());
   }
@@ -591,12 +642,12 @@ class Component extends DCLogic {
         h('div',{ style:{ display:'flex', alignItems:'flex-end', gap:'14px', borderBottom:'2px solid '+C.ink,
           paddingBottom:'10px', maxWidth:'420px' } },
           h('input',{ type:'number', value:this.state.capacity, inputMode:'numeric',
-            onChange:e=>this.setState({capacity:Math.max(10,parseInt(e.target.value||'0',10))}),
+            onChange:e=>this.setCapacity(parseInt(e.target.value||'0',10)),
             style:{ width:'100%', border:'none', background:'transparent', fontFamily:this.mono, fontSize:'52px',
               fontWeight:500, color:C.ink, padding:0 } }),
           h('span',{ style:{ fontFamily:this.mono, fontSize:'22px', color:C.sub, paddingBottom:'8px' } }, 'ml')),
         h('div',{ style:{ display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'22px' } },
-          presets.map(p=>h('button',{ key:p, 'data-press':'1', onClick:()=>this.setState({capacity:p}),
+          presets.map(p=>h('button',{ key:p, 'data-press':'1', onClick:()=>this.setCapacity(p),
             style:{ padding:'9px 16px', borderRadius:'999px', border:'1px solid '+(this.state.capacity===p?C.A:C.line),
               background:this.state.capacity===p?'#fff':'transparent', color:this.state.capacity===p?C.A:C.sub,
               fontFamily:this.mono, fontSize:'13px', fontWeight:600 } }, p+' ml')))
@@ -829,7 +880,7 @@ class Component extends DCLogic {
       { key:'shoulderHeight', y:(g.yNeckBot+g.yShoulderBot)/2, r:(g.rN+g.rS)/2, label:'Shoulder H' },
       { key:'body', y:(g.yShoulderBot+g.yBodyBot)/2, r:g.rS, label:'Body H' },
       { key:'slug', y:g.yBase-4, r:g.rB*0.4, label:'Base thk' }
-    ];
+    ].filter(hd=>!(this.state.holdCapacity && hd.key==='body'));
     return h('section',{ style:{ position:'relative', display:'flex', flexDirection:'column',
       background:lit?'radial-gradient(120% 80% at 50% 22%, #23252C 0%, #16171A 62%, #101115 100%)':C.stagePanel,
       borderRight:'1px solid '+C.stageLine, overflow:'hidden', minHeight:'520px' }, className:'bs-stage' },
@@ -870,7 +921,9 @@ class Component extends DCLogic {
               h('stop',{ offset:'1', stopColor:lit?'#2C2F36':'#CFC9BC' })),
             h('linearGradient',{ id:'bsLiq', x1:'0', y1:'0', x2:'0', y2:'1' },
               h('stop',{ offset:'0', stopColor:C.A, stopOpacity:.5 }),
-              h('stop',{ offset:'1', stopColor:C.A, stopOpacity:.78 }))
+              h('stop',{ offset:'1', stopColor:C.A, stopOpacity:.78 })),
+            h('pattern',{ id:'bsHatch', width:6, height:6, patternUnits:'userSpaceOnUse', patternTransform:'rotate(45)' },
+              h('line',{ x1:0, y1:0, x2:0, y2:6, stroke:lit?'#FFFFFF':C.A, strokeWidth:1, strokeOpacity:lit?.16:.22 }))
           ),
           // contact shadow
           h('ellipse',{ cx:g.cx, cy:g.yBase+20, rx:g.rB*1.05, ry:12, fill:lit?'#000':'#000', opacity:lit?.5:.12 }),
@@ -879,7 +932,9 @@ class Component extends DCLogic {
           // liquid fill (clipped)
           inner?h('g',{ clipPath:'url(#bsInner)' },
             h('rect',{ x:g.cx-g.rS-20, y:fillTop, width:(g.rS+20)*2, height:g.yBase-fillTop+4, fill:'url(#bsLiq)' }),
-            h('line',{ x1:g.cx-g.rS-20, y1:fillTop, x2:g.cx+g.rS+20, y2:fillTop, stroke:C.A, strokeWidth:1.2, strokeOpacity:.9 })
+            fillTop>g.ySdrTop+0.5?h('rect',{ x:g.cx-g.rS-20, y:g.ySdrTop, width:(g.rS+20)*2, height:fillTop-g.ySdrTop, fill:'url(#bsHatch)' }):null,
+            h('line',{ x1:g.cx-g.rS-20, y1:fillTop, x2:g.cx+g.rS+20, y2:fillTop, stroke:C.A, strokeWidth:1.2, strokeOpacity:.9 }),
+            h('line',{ x1:g.cx-g.rS-20, y1:g.ySdrTop, x2:g.cx+g.rS+20, y2:g.ySdrTop, stroke:lit?'#FFFFFF':C.sub, strokeWidth:1, strokeDasharray:'4 3', strokeOpacity:lit?.55:.7 })
           ):null,
           // inner wall dashed
           inner?h('path',{ d:inner, fill:'none', stroke:lit?'#9AA0AD':'#9A9183', strokeWidth:.9, strokeDasharray:'3 3', strokeOpacity:.55 }):null,
@@ -965,7 +1020,7 @@ class Component extends DCLogic {
       h('style',null,'@media (max-width:600px){.bs-dock{gap:14px}.bs-metrics{grid-template-columns:1fr 1fr !important}}@media (max-width:360px){.bs-dock{flex-direction:column;align-items:flex-start;gap:12px}.bs-metrics{width:100%}.bs-dock>div:last-child{border-left:none;padding-left:0}}'),
       h('div',{ className:'bs-metrics', style:{ display:'grid', gridTemplateColumns:'repeat(4,auto)', gap:'18px 26px', flex:'1' } },
         cell('Overall', this.fmt(cv(disp.overallHeightCm), u==='mm'?0:1)+' '+u),
-        cell('Fill', this.fmt(disp.fillMl,0)+' ml', 'brimful '+this.fmt(disp.brimfulMl,0)),
+        cell('Fill', this.fmt(disp.fillMl,0)+' ml', 'brimful '+this.fmt(disp.brimfulMl,0)+' · '+Math.round(this.state.dimensions.headspace*100)+'% ullage'),
         cell('Weight', this.fmt(disp.weightG,0)+' g'),
         cell('g / ml', disp.ratio.toFixed(3), 'lightweighting')
       ),
@@ -992,10 +1047,7 @@ class Component extends DCLogic {
               style:{ padding:'6px 13px', fontSize:'12px', fontWeight:600, color:this.state.advanced===adv?'#fff':C.sub,
                 background:this.state.advanced===adv?C.ink:'transparent' } }, l)))
         ),
-        h('div',{ style:{ display:'flex', gap:'7px', flexWrap:'wrap' } },
-          this.PRESETS.map(p=>h('button',{ key:p.key, 'data-press':'1', onClick:()=>this.applyPreset(p),
-            style:{ padding:'7px 12px', borderRadius:'999px', border:'1px solid '+C.line, background:C.card,
-              fontSize:'12px', color:C.ink, fontWeight:500 } }, p.label)))
+        this.renderTemplates()
       ),
       // tabs
       h('div',{ style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderBottom:'1px solid '+C.line, background:C.paper, position:'sticky', top:0, zIndex:2 } },
@@ -1009,8 +1061,8 @@ class Component extends DCLogic {
       ),
       // pinned footer
       h('div',{ style:{ borderTop:'1px solid '+C.line, padding:'14px clamp(16px,2.4vw,22px)', display:'flex', gap:'10px', background:C.paper } },
-        h('button',{ 'data-press':'1', onClick:()=>this.matchCapacity(),
-          style:{ flex:'1', padding:'12px', borderRadius:'999px', border:'1px solid '+C.line, background:'#fff', color:C.ink, fontSize:'13.5px', fontWeight:600 } }, 'Match '+this.state.capacity+' ml'),
+        h('button',{ 'data-press':'1', onClick:()=>this.toggleHold(), 'aria-pressed':this.state.holdCapacity,
+          style:{ flex:'1', padding:'12px', borderRadius:'999px', border:'1px solid '+(this.state.holdCapacity?C.A:C.line), background:'#fff', color:this.state.holdCapacity?C.A:C.ink, fontSize:'13.5px', fontWeight:600 } }, (this.state.holdCapacity?'🔒 Holding ':'🔓 Hold ')+this.state.capacity+' ml'),
         h('button',{ 'data-press':'1', onClick:()=>this.go(this.state.idx+1),
           style:{ flex:'1', padding:'12px', borderRadius:'999px', background:C.ink, color:'#fff', fontSize:'13.5px', fontWeight:600 } }, 'Material \u2192')
       )
@@ -1058,6 +1110,20 @@ class Component extends DCLogic {
     );
   }
   // control widgets
+  lockedBodyRow() {
+    const h=this.h, C=this.C, u=this.state.units;
+    const body=this.state.dimensions.body, atLimit=body<=this.RANGES.body[0]+1e-3||body>=this.RANGES.body[1]-1e-3;
+    const hint=atLimit ? 'Auto — can’t reach '+this.state.capacity+' ml (body at limit)' : 'Auto — solved to hold '+this.state.capacity+' ml';
+    return h('div',{ style:{ marginBottom:'16px' } },
+      h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'7px' } },
+        h('span',{ style:{ display:'inline-flex', alignItems:'center', gap:'6px' } },
+          h('span',{ style:{ fontSize:'13.5px', fontWeight:500, color:C.ink } }, 'Body height'), this.helpDot('body')),
+        h('span',{ style:{ fontFamily:this.mono, fontSize:'10px', color:C.A } }, '🔒 auto')),
+      h('div',{ style:{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', border:'1px dashed '+C.line, borderRadius:'6px', background:C.paper, padding:'11px 14px', opacity:.75 } },
+        h('span',{ style:{ fontFamily:this.mono, fontSize:'15px', color:C.ink, fontVariantNumeric:'tabular-nums' } }, this.fmt(this.toDisp(body), u==='mm'?0:2)+' '+u),
+        h('span',{ style:{ fontSize:'10.5px', color:atLimit?C.warn:C.sub } }, hint))
+    );
+  }
   numRow(key, label, opts={}) {
     const h=this.h, C=this.C, r=this.RANGES[key], st=this.STEPS[key];
     const u=this.state.units, cm=u==='mm', uf=cm?10:1;
@@ -1112,7 +1178,7 @@ class Component extends DCLogic {
     const h=this.h, adv=this.state.advanced;
     return h('div',null,
       this.numRow('shoulderWidth','Body \u00d8 (at shoulder)',{tag:'drag \u2194'}),
-      this.numRow('body','Body height',{tag:'drag \u2195'}),
+      this.state.holdCapacity ? this.lockedBodyRow() : this.numRow('body','Body height',{tag:'drag \u2195'}),
       this.numRow('baseWidth','Base \u00d8',{tag:'drag \u2194'}),
       adv?h('div',null,
         this.state.shape==='oval'?this.numRow('bodyDepth','Body depth (Y)'):null,

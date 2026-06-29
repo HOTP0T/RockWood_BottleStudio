@@ -1,0 +1,10 @@
+[
+  {
+    "key": "hex-apothecary-100",
+    "label": "Hex apothecary 100",
+    "cap": 100,
+    "finish": "24-410",
+    "closure": "screw-cap",
+    "d": { "mouth": 2.44, "bore": 1.6, "finishHeight": 1.2, "neck": 2.0, "neckWidth": 2.2, "shoulderHeight": 1.4, "shoulderWidth": 4.6, "shoulderRadius": 0.2, "body": 7.5, "bodyDepth": 4.6, "wallThickness": 0.2, "baseWidth": 4.6, "heelRadius": 0.2, "punt": 0.2, "slug": 0.9, "headspace": 0.05 }
+  }
+]

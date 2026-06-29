@@ -1,0 +1,34 @@
+[
+  {
+    "key": "bordeaux",
+    "label": "Bordeaux 750",
+    "cap": 750,
+    "finish": "bvs-30",
+    "closure": "screw-cap",
+    "d": { "mouth": 3.0, "bore": 1.85, "finishHeight": 2.4, "neck": 5.0, "neckWidth": 2.7, "shoulderHeight": 2.4, "shoulderWidth": 7.8, "shoulderRadius": 0.25, "body": 18.5, "bodyDepth": 7.8, "wallThickness": 0.24, "baseWidth": 7.8, "heelRadius": 0.3, "punt": 1.4, "slug": 1.2, "headspace": 0.03 }
+  },
+  {
+    "key": "boston",
+    "label": "Boston round 250",
+    "cap": 250,
+    "finish": "24-410",
+    "closure": "screw-cap",
+    "d": { "mouth": 2.44, "bore": 1.78, "finishHeight": 1.42, "neck": 2.4, "neckWidth": 2.2, "shoulderHeight": 2.2, "shoulderWidth": 5.6, "shoulderRadius": 0.7, "body": 9.5, "bodyDepth": 5.6, "wallThickness": 0.2, "baseWidth": 5.6, "heelRadius": 0.5, "punt": 0.3, "slug": 1.0, "headspace": 0.05 }
+  },
+  {
+    "key": "beer",
+    "label": "Beer long-neck 330",
+    "cap": 330,
+    "finish": "crown-26",
+    "closure": "mouth-ring",
+    "d": { "mouth": 2.66, "bore": 1.6, "finishHeight": 0.6, "neck": 6.0, "neckWidth": 2.4, "shoulderHeight": 2.0, "shoulderWidth": 6.2, "shoulderRadius": 0.55, "body": 11.5, "bodyDepth": 6.2, "wallThickness": 0.22, "baseWidth": 6.2, "heelRadius": 0.45, "punt": 0.9, "slug": 1.1, "headspace": 0.09 }
+  },
+  {
+    "key": "jar",
+    "label": "Wide-mouth jar 500",
+    "cap": 500,
+    "finish": "38-400",
+    "closure": "screw-cap",
+    "d": { "mouth": 3.85, "bore": 3.02, "finishHeight": 1.02, "neck": 1.0, "neckWidth": 3.85, "shoulderHeight": 1.6, "shoulderWidth": 8.4, "shoulderRadius": 0.8, "body": 9.0, "bodyDepth": 8.4, "wallThickness": 0.26, "baseWidth": 8.0, "heelRadius": 0.4, "punt": 0.2, "slug": 1.3, "headspace": 0.05 }
+  }
+]

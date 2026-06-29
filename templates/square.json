@@ -1,0 +1,10 @@
+[
+  {
+    "key": "square-spirit-500",
+    "label": "Square spirit 500",
+    "cap": 500,
+    "finish": "28-400",
+    "closure": "screw-cap",
+    "d": { "mouth": 2.84, "bore": 2.0, "finishHeight": 1.5, "neck": 3.0, "neckWidth": 2.6, "shoulderHeight": 1.5, "shoulderWidth": 7.2, "shoulderRadius": 0.3, "body": 13.0, "bodyDepth": 7.2, "wallThickness": 0.28, "baseWidth": 7.2, "heelRadius": 0.2, "punt": 0.3, "slug": 1.4, "headspace": 0.04 }
+  }
+]

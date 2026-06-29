@@ -1,0 +1,10 @@
+[
+  {
+    "key": "oval-flask-200",
+    "label": "Oval flask 200",
+    "cap": 200,
+    "finish": "24-410",
+    "closure": "screw-cap",
+    "d": { "mouth": 2.44, "bore": 1.78, "finishHeight": 1.2, "neck": 2.5, "neckWidth": 2.2, "shoulderHeight": 2.2, "shoulderWidth": 7.0, "shoulderRadius": 0.6, "body": 10.0, "bodyDepth": 3.6, "wallThickness": 0.22, "baseWidth": 7.0, "heelRadius": 0.5, "punt": 0.2, "slug": 1.0, "headspace": 0.05 }
+  }
+]
