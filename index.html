@@ -175,9 +175,9 @@ class Component extends DCLogic {
   fmt(n, d=0) { if(!isFinite(n)) n=0; return n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}); }
   money(n) { return '$' + this.fmt(n, 2); }
   reduced() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){ return false; } }
-  toDisp(v) { return this.state.units==='mm' ? v*10 : v; }
-  fromDisp(v) { return this.state.units==='mm' ? v/10 : v; }
-  uLabel() { return this.state.units; }
+  toDisp(v) { return v*10; }        // mm only
+  fromDisp(v) { return v/10; }      // mm only
+  uLabel() { return 'mm'; }
 
   dispNow() { return this.state.disp || this.metricsFrom(this.estimate(this.state)); }
   componentDidMount() {
@@ -250,8 +250,7 @@ class Component extends DCLogic {
     const mat=this.MATERIALS.find(m=>m.key===s.material)||this.MATERIALS[1];
     const wallMult=1+0.08*Math.abs(s.wall);
     const unitGlass=weightG*this.COST_PER_GRAM*mat.mult*wallMult;
-    const closure=d.mouth*0.037+0.01;
-    const unit=unitGlass+closure;
+    const unit=unitGlass;   // glass only — we only sell the bottle, no closure
     const tooling=this.TOOLING[shape]||8000;
     const qty=Math.max(1,s.quantity), tpu=tooling/qty;
     const overall=d.finishHeight+d.neck+d.shoulderHeight+d.body;
@@ -268,18 +267,14 @@ class Component extends DCLogic {
   }
   feasibility(s) {
     const d=s.dimensions, e=this.estimate(s), out=[];
-    if(d.neckWidth>d.shoulderWidth) out.push({level:'error',msg:'Neck \u00d8 exceeds shoulder \u00d8 \u2014 the parison cannot form.', fix:{tab:'finish', hint:'Reduce Neck \u00d8 on the Finish tab'}});
-    if(d.bore>=d.mouth) out.push({level:'error',msg:'Bore \u00d8 \u2265 thread \u00d8 \u2014 no glass left for the finish wall.', fix:{tab:'finish', adv:true, hint:'Raise Thread \u00d8 or lower Bore \u00d8 (Finish tab)'}});
-    if(d.baseWidth>d.shoulderWidth) out.push({level:'warn',msg:'Base \u00d8 exceeds shoulder \u00d8 \u2014 inverted taper is unstable.', fix:{tab:'base', hint:'Reduce Base \u00d8 on the Base tab'}});
-    if(e.overallHeightCm/d.shoulderWidth>4) out.push({level:'warn',msg:'Height-to-width over 4:1 \u2014 tip-over risk.', fix:{tab:'size', hint:'Lower Body height or widen Body \u00d8 (Size tab)'}});
-    if(e.minWallMm<1.0) out.push({level:'warn',msg:'Min wall under 1.0 mm \u2014 thin spots likely.', fix:{tab:'size', adv:true, hint:'Increase Wall thickness (Size tab, Advanced)'}});
-    if(s.fillType==='carbonated' && (e.minWallMm<1.5 || d.punt*10<20)) out.push({level:'warn',msg:'Carbonated fill needs min wall \u22651.5 mm and punt \u226520 mm.', fix:{tab:'base', hint:'Deepen the Punt (Base) or thicken the Wall (Size)'}});
-    if(d.punt>d.slug) out.push({level:'warn',msg:'Push-up is deeper than the base is thick.', fix:{tab:'base', hint:'Reduce Push-up depth or thicken Base glass (Base tab)'}});
-    const fin=this.FINISHES.find(f=>f.key===s.finish);
-    if(fin && !fin.closures.includes(s.closure)) out.push({level:'warn',msg:'Chosen closure is not compatible with the '+fin.name+' finish.', fix:{tab:'finish', hint:'Pick a compatible finish on the Finish tab'}});
-    const drift=Math.abs(e.fillMl-s.capacity)/Math.max(1,s.capacity);
-    if(drift>0.12) out.push({level:'info',msg:'Fill capacity drifts '+Math.round(drift*100)+'% from your '+s.capacity+' ml target.', fix:{action:'match', tab:'size', hint:'Auto-fit Body height to '+s.capacity+' ml'}});
-    if(e.order.belowMoq) out.push({level:'info',msg:'Order qty is below this material\u2019s MOQ ('+this.fmt(e.order.moq)+').', fix:{tab:'production', hint:'Raise Order quantity or change material (Production tab)'}});
+    if(d.neckWidth>d.shoulderWidth) out.push({level:'error',msg:'Neck \u00d8 exceeds shoulder \u00d8 \u2014 the parison cannot form.', fix:{hint:'Increase Body \u00d8'}});
+    if(d.bore>=d.mouth) out.push({level:'error',msg:'Bore \u00d8 \u2265 thread \u00d8 \u2014 no glass left for the finish wall.'});
+    if(d.baseWidth>d.shoulderWidth) out.push({level:'warn',msg:'Base \u00d8 exceeds shoulder \u00d8 \u2014 inverted taper is unstable.', fix:{hint:'Reduce Base \u00d8'}});
+    if(e.overallHeightCm/d.shoulderWidth>4) out.push({level:'warn',msg:'Height-to-width over 4:1 \u2014 tip-over risk.', fix:{hint:'Lower capacity or widen Body \u00d8'}});
+    if(e.minWallMm<1.0) out.push({level:'warn',msg:'Min wall under 1.0 mm \u2014 thin spots likely.'});
+    if(s.fillType==='carbonated' && (e.minWallMm<1.5 || d.punt*10<20)) out.push({level:'warn',msg:'Carbonated fill needs min wall \u22651.5 mm and punt \u226520 mm.', fix:{hint:'Deepen the Push-up or thicken the Base glass'}});
+    if(d.punt>d.slug) out.push({level:'warn',msg:'Push-up is deeper than the base is thick.', fix:{hint:'Reduce Push-up depth or thicken Base glass'}});
+    if(e.order.belowMoq) out.push({level:'warn',msg:'Order qty '+this.fmt(e.order.quantity)+' is below this material\u2019s MOQ ('+this.fmt(e.order.moq)+').', fix:{hint:'Raise Order quantity or change material'}});
     return out;
   }
   feasSummary(s) {
@@ -329,7 +324,6 @@ class Component extends DCLogic {
   }
   setField(patch) { this.setState(patch, ()=>this.afterChange()); }
   setCapacity(v) { this.setState({ capacity:Math.max(10, v||0) }, ()=>this.afterChange()); }
-  toggleHold() { const next=!this.state.holdCapacity; this.setState({ holdCapacity:next }, ()=>{ if(next) this.afterChange(); }); }
   setFill(key) {
     const f=this.FILLTYPES.find(x=>x.key===key);
     this.setState(st=>({ fillType:key, dimensions:{...st.dimensions, headspace:f?f.hs:st.dimensions.headspace} }), ()=>this.afterChange());
@@ -337,6 +331,12 @@ class Component extends DCLogic {
   setFinish(key) {
     const f=this.FINISHES.find(x=>x.key===key); if(!f) return;
     this.setState(st=>({ finish:key, dimensions:{...st.dimensions, mouth:f.T, bore:f.I, finishHeight:f.H, neckWidth:Math.min(st.dimensions.neckWidth, f.T)} }), ()=>this.afterChange());
+  }
+  DEFAULT_FINISH = { 'screw-cap':'28-400', 't-cap':'cork-185', 'mouth-ring':'crown-26' };
+  setClosure(key) {
+    // No user-facing finish picker anymore — pick a compatible default finish for the closure
+    const fin=this.DEFAULT_FINISH[key];
+    this.setState({ closure:key }, ()=>{ if(fin) this.setFinish(fin); else this.afterChange(); });
   }
   applyPreset(p) {
     const d={ ...this.baseDims(), ...(p.d||{}) }; d.neckWidth=Math.min(d.neckWidth, d.mouth);
@@ -381,7 +381,7 @@ class Component extends DCLogic {
   // ================= NAV =================
   go(i) { this.setState({ idx:this.clamp(i,0,this.FLOW.length-1) }); }
   emailOk() { return /.+@.+\..+/.test(this.state.contact.email); }
-  canNext() { if(this.FLOW[this.state.idx]==='contact') return this.emailOk(); return true; }
+  canNext() { return true; }   // landing no longer gates on email — captured at the estimate step
 
   estimateObject() {
     const s=this.state, e=this.estimate(s), fin=this.FINISHES.find(f=>f.key===s.finish);
@@ -466,7 +466,8 @@ class Component extends DCLogic {
       A, paper:'#F6F3ED', card:'#FCFAF6', ink:'#211E19', sub:'#736B5E', faint:'#9A9183',
       line:'#E4DDD1', lineSoft:'#EEE9DF',
       stageBg:'#15161A', stagePanel:'#1C1E23', stageInk:'#ECE7DD', stageSub:'#8A8780', stageLine:'#2C2E34',
-      ok:'#2F7D55', warn:'#B5811A', err:'#B23A2A'
+      ok:'#2F7D55', warn:'#B5811A', err:'#B23A2A',
+      red:'#CC2E22', redBg:'#FDECEA', redLine:'#F3B4AD'
     };
   }
   serif='\'Newsreader\', Georgia, serif';
@@ -493,9 +494,9 @@ class Component extends DCLogic {
 
   renderHeader(dark) {
     const h=this.h, C=this.C, idx=this.state.idx;
-    const steps=[ {k:'closure',n:'01'},{k:'capacity',n:'02'},{k:'shape',n:'03'},{k:'refine',n:'04'},{k:'material',n:'05'} ];
+    const steps=[ {k:'contact',n:'01'},{k:'closure',n:'02'},{k:'capacity',n:'03'},{k:'shape',n:'04'},{k:'refine',n:'05'},{k:'material',n:'06'} ];
     const ink=dark?C.stageInk:C.ink, sub=dark?C.stageSub:C.sub, line=dark?C.stageLine:C.line;
-    const labels={ contact:'Contact', closure:'Closure', capacity:'Capacity', shape:'Shape', refine:'Refine', material:'Material', summary:'Summary' };
+    const labels={ contact:'Welcome', closure:'Closure', capacity:'Capacity', shape:'Shape', refine:'Refine', material:'Glass', summary:'Summary' };
     return h('header',{ className:'bs-header', style:{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'18px',
       padding:'18px clamp(16px,4vw,34px)', borderBottom:'1px solid '+line, position:'sticky', top:0, zIndex:30,
       background:(dark?C.stageBg:C.paper)+'F2', backdropFilter:'blur(8px)' } },
@@ -517,19 +518,8 @@ class Component extends DCLogic {
           );
         })
       ),
-      h('div',{ style:{ display:'flex', alignItems:'center', gap:'8px' } },
-        this.FLOW[idx]!=='refine' ? h('span',{ className:'bs-stepcount', style:{ fontFamily:this.mono, fontSize:'11px', color:sub, letterSpacing:'.04em' } },
-          (idx+1)+' / '+this.FLOW.length) : null,
-        this.FLOW[idx]==='refine' ? this.unitsToggle() : null
-      )
+      h('div',{ 'aria-hidden':'true', style:{ width:'26px' } })
     );
-  }
-  unitsToggle() {
-    const h=this.h, C=this.C, u=this.state.units;
-    return h('div',{ style:{ display:'inline-flex', border:'1px solid '+C.stageLine, borderRadius:'999px', overflow:'hidden' } },
-      ['mm','cm'].map(x=>h('button',{ key:x, 'data-press':'1', onClick:()=>this.setState({units:x}),
-        style:{ padding:'6px 13px', fontFamily:this.mono, fontSize:'11.5px', color:u===x?C.stageBg:C.stageSub,
-          background:u===x?C.A:'transparent', fontWeight:600 } }, x)))
   }
 
   // generic light-card pickable
@@ -590,19 +580,55 @@ class Component extends DCLogic {
     );
   }
 
-  // ---------- CONTACT ----------
+  // ---------- LANDING ----------
   screenContact() {
-    const h=this.h, C=this.C, c=this.state.contact;
-    return this.flowShell({ wide:'560px', kicker:'Bottle Studio',
-      title:'Design a custom bottle. See the weight & price live.',
-      sub:'Walk through a few quick choices, then refine the glass directly on a live drawing. We\u2019ll hand the spec to our packaging engineers.',
-      children: h('div',{ style:{ display:'flex', flexDirection:'column', gap:'18px', maxWidth:'480px' } },
-        this.field('Email address *', c.email, v=>this.setState({contact:{...c,email:v}}), {type:'email', inputMode:'email', placeholder:'you@brand.com'}),
-        this.field('Phone (optional)', c.phone, v=>this.setState({contact:{...c,phone:v}}), {type:'tel', inputMode:'tel', placeholder:'+1 555 000 0000'}),
-        !this.emailOk() && c.email ? h('span',{ style:{ fontSize:'12.5px', color:C.err, display:'flex', gap:'6px', alignItems:'center' } },
-          h('span',null,'!'),'Enter a valid email to continue.') : null
-      )
-    });
+    const h=this.h, C=this.C;
+    const mail='mailto:sales@rockwoodbottle.com?subject=Custom%20bottle%20enquiry';
+    return h('div',{ className:'bs-landing', style:{ flex:'1', display:'grid', gridTemplateColumns:'minmax(0,1.05fr) minmax(0,1fr)', alignItems:'stretch', minHeight:0 } },
+      h('style',null,'@media (max-width:900px){.bs-landing{grid-template-columns:1fr !important}.bs-landing-copy{order:2 !important;padding:clamp(24px,5vw,40px) !important}.bs-teaser{order:1 !important;min-height:44vh}}'),
+      h('div',{ className:'bs-landing-copy', style:{ display:'flex', flexDirection:'column', justifyContent:'center', padding:'clamp(28px,6vh,72px) clamp(20px,5vw,64px)' } },
+        h('div',{ style:{ maxWidth:'620px' } },
+          h('div',{ style:{ fontFamily:this.mono, fontSize:'12px', letterSpacing:'.16em', textTransform:'uppercase', color:C.A, marginBottom:'16px' } }, 'Rockwood Bottle Studio'),
+          h('h1',{ style:{ fontFamily:this.serif, fontSize:'clamp(30px,4.4vw,50px)', lineHeight:1.05, fontWeight:400, margin:'0 0 18px', color:C.ink, letterSpacing:'-.01em', textWrap:'pretty' } }, 'Welcome to the Rockwood Bottle Configurator'),
+          h('p',{ style:{ fontSize:'17px', color:C.sub, margin:'0 0 16px', lineHeight:1.55, maxWidth:'54ch' } }, 'Create a custom glass bottle in minutes, then let our engineers transform your concept into a fully manufacturable design.'),
+          h('p',{ style:{ fontSize:'15px', color:C.sub, margin:'0 0 32px', lineHeight:1.55, maxWidth:'54ch' } }, 'Start with a few simple choices. Next, refine your bottle using our live design tool. Once you\u2019re happy, we\u2019ll hand your concept to our packaging engineers.'),
+          h('div',{ style:{ display:'flex', flexWrap:'wrap', gap:'14px', alignItems:'center' } },
+            h('button',{ 'data-press':'1', onClick:()=>this.go(this.state.idx+1),
+              style:{ padding:'15px 30px', borderRadius:'999px', border:'none', background:C.ink, color:'#fff', fontSize:'15.5px', fontWeight:600, cursor:'pointer', boxShadow:'0 10px 26px -12px rgba(33,30,25,.7)' } }, 'Start designing  \u2192'),
+            h('a',{ href:mail, style:{ padding:'15px 26px', borderRadius:'999px', border:'1px solid '+C.line, background:'transparent', color:C.ink, fontSize:'15px', fontWeight:600, textDecoration:'none' } }, 'Or send us an email')
+          ),
+          h('div',{ style:{ marginTop:'18px', fontSize:'12.5px', color:C.faint } }, 'No sign-up needed \u2014 we\u2019ll ask for your email only when you request the estimate.')
+        )
+      ),
+      this.renderTeaser()
+    );
+  }
+  renderTeaser() {
+    const h=this.h, C=this.C, g=this.buildProfile(), e=this.estimate(this.state), disp=this.dispNow();
+    const outer=this.pathFrom(g.pts,g.cx,g.yBase), inner=this.innerPath(g.pts,g.cx,g.tPx,g.yBase);
+    const fillTop=this.fillLevelY(g,e);
+    return h('div',{ className:'bs-teaser', style:{ position:'relative', display:'grid', placeItems:'center', overflow:'hidden',
+        background:'radial-gradient(120% 80% at 50% 20%, #23252C 0%, #16171A 62%, #101115 100%)', borderLeft:'1px solid '+C.stageLine } },
+      h('svg',{ viewBox:'0 0 '+g.viewW+' '+g.viewH, style:{ width:'auto', height:'clamp(280px,68vh,600px)', maxWidth:'78%', overflow:'visible' } },
+        h('defs',null,
+          inner?h('clipPath',{ id:'bsTInner' }, h('path',{ d:inner })):null,
+          h('linearGradient',{ id:'bsTGlass', x1:'0', y1:'0', x2:'1', y2:'0' },
+            h('stop',{ offset:'0', stopColor:'#3A3D45' }), h('stop',{ offset:'.5', stopColor:'#6A6E78' }), h('stop',{ offset:'1', stopColor:'#2C2F36' })),
+          h('linearGradient',{ id:'bsTLiq', x1:'0', y1:'0', x2:'0', y2:'1' },
+            h('stop',{ offset:'0', stopColor:C.A, stopOpacity:.5 }), h('stop',{ offset:'1', stopColor:C.A, stopOpacity:.78 }))),
+        h('ellipse',{ cx:g.cx, cy:g.yBase+20, rx:g.rB*1.05, ry:12, fill:'#000', opacity:.5 }),
+        h('path',{ d:outer, fill:'url(#bsTGlass)', stroke:'#0C0D10', strokeWidth:1.4, strokeLinejoin:'round' }),
+        inner?h('g',{ clipPath:'url(#bsTInner)' }, h('rect',{ x:g.cx-g.rS-20, y:fillTop, width:(g.rS+20)*2, height:g.yBase-fillTop+4, fill:'url(#bsTLiq)' })):null,
+        h('line',{ x1:g.cx, y1:g.top-4, x2:g.cx, y2:g.yBase, stroke:'#FFFFFF', strokeWidth:.7, strokeDasharray:'2 5', strokeOpacity:.22 })
+      ),
+      h('div',{ className:'bs-teaser-price', style:{ position:'absolute', left:'clamp(16px,3vw,28px)', bottom:'clamp(16px,3vw,28px)',
+          background:'rgba(16,17,21,.72)', backdropFilter:'blur(6px)', border:'1px solid '+C.stageLine, borderRadius:'12px', padding:'12px 16px', color:'#fff' } },
+        h('div',{ style:{ fontSize:'10px', fontWeight:700, letterSpacing:'.12em', textTransform:'uppercase', color:C.A } }, 'Live estimate'),
+        h('div',{ style:{ display:'flex', alignItems:'baseline', gap:'8px', marginTop:'4px' } },
+          h('span',{ style:{ fontFamily:this.mono, fontSize:'26px', fontWeight:700 } }, this.money(disp.priceUSD)),
+          h('span',{ style:{ fontSize:'11px', color:C.stageSub } }, 'per bottle')),
+        h('div',{ style:{ fontSize:'11px', color:C.stageSub, marginTop:'2px', fontFamily:this.mono } }, this.fmt(this.state.capacity)+' ml \u00b7 '+this.state.shape+' \u00b7 est. \u00b110%'))
+    );
   }
 
   glyphClosure(key, color) {
@@ -618,11 +644,11 @@ class Component extends DCLogic {
   }
   screenClosure() {
     const h=this.h, C=this.C;
-    return this.flowShell({ kicker:'Step 01', title:'How does it close?',
-      sub:'Pick the closure family. It sets which finishes are compatible later.',
+    return this.flowShell({ kicker:'Step 02', title:'How does it close?',
+      sub:'Pick the closure family. It shapes the neck and rim of your bottle.',
       children: h('div',{ role:'radiogroup', style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'16px' } },
         this.CLOSURES.map(cl=>this.pickCard({ key:cl.key, selected:this.state.closure===cl.key, minH:'196px',
-          onClick:()=>this.setState({closure:cl.key}),
+          onClick:()=>this.setClosure(cl.key),
           children:h('div',{ style:{ display:'flex', flexDirection:'column', height:'100%' } },
             h('div',{ style:{ marginBottom:'auto' } }, this.glyphClosure(cl.key, this.state.closure===cl.key?C.A:C.ink)),
             h('div',{ style:{ fontFamily:this.serif, fontSize:'21px', marginTop:'18px', color:C.ink } }, cl.label),
@@ -635,7 +661,7 @@ class Component extends DCLogic {
   screenCapacity() {
     const h=this.h, C=this.C;
     const presets=[250,330,500,700,750,1000];
-    return this.flowShell({ wide:'620px', kicker:'Step 02', title:'What\u2019s the target capacity?',
+    return this.flowShell({ wide:'620px', kicker:'Step 03', title:'What\u2019s the target capacity?',
       sub:'The nominal (labelled) fill volume. You can fine-tune the exact geometry in the studio.',
       children: h('div',null,
         h('div',{ style:{ display:'flex', alignItems:'flex-end', gap:'14px', borderBottom:'2px solid '+C.ink,
@@ -664,7 +690,7 @@ class Component extends DCLogic {
   }
   screenShape() {
     const h=this.h, C=this.C;
-    return this.flowShell({ kicker:'Step 03', title:'Choose the footprint.',
+    return this.flowShell({ kicker:'Step 04', title:'Choose the footprint.',
       sub:'The cross-section of the body. Oval and rectangular footprints give panel-flats for labels.',
       children: h('div',{ role:'radiogroup', style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(132px,1fr))', gap:'16px' } },
         this.SHAPES.map(sh=>this.pickCard({ key:sh.key, selected:this.state.shape===sh.key, minH:'150px',
@@ -679,8 +705,8 @@ class Component extends DCLogic {
   // ---------- MATERIAL ----------
   screenMaterial() {
     const h=this.h, C=this.C;
-    return this.flowShell({ kicker:'Step 05', title:'Pick the glass.',
-      sub:'Material affects clarity, light protection, cost and the minimum order quantity.',
+    return this.flowShell({ kicker:'Step 06', title:'Pick the glass & quantity.',
+      sub:'Material affects clarity, light protection, cost and the minimum order quantity. Set your order quantity below.',
       children: h('div',null,
         h('div',{ role:'radiogroup', style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:'16px' } },
         this.MATERIALS.map(m=>this.pickCard({ key:m.key, selected:this.state.material===m.key, minH:'200px',
@@ -690,10 +716,14 @@ class Component extends DCLogic {
             h('div',{ style:{ fontFamily:this.serif, fontSize:'21px', marginTop:'16px', color:C.ink } }, m.label),
             h('div',{ style:{ fontSize:'12.5px', color:C.sub, marginTop:'4px' } }, 'Light: '+m.protect),
             h('div',{ style:{ display:'flex', gap:'14px', marginTop:'12px', fontFamily:this.mono, fontSize:'11.5px', color:C.faint } },
-              h('span',null,'\u00d7'+m.mult.toFixed(2)+' cost'),
               h('span',null,'MOQ '+this.fmt(m.moq))
             )
           ) }))),
+        h('div',{ style:{ marginTop:'24px', maxWidth:'340px' } },
+          h('div',{ style:{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12.5px', fontWeight:600, color:C.sub, marginBottom:'8px' } }, 'Order quantity', this.helpDot('quantity')),
+          h('input',{ type:'number', value:this.state.quantity, min:1, inputMode:'numeric',
+            onChange:ev=>this.setField({quantity:Math.max(1,parseInt(ev.target.value||'1',10))}),
+            style:{ width:'100%', padding:'13px 15px', borderRadius:'6px', border:'1px solid '+C.line, background:'#fff', fontFamily:this.mono, fontSize:'17px', color:C.ink } })),
         this.renderMaterialPrice()
       )
     });
@@ -709,28 +739,36 @@ class Component extends DCLogic {
     return h('div',{ style:{ marginTop:'24px', background:C.card, border:'1px solid '+C.line, borderRadius:'6px', padding:'20px 22px' } },
       h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'12px', marginBottom:'16px', flexWrap:'wrap' } },
         h('span',{ style:{ fontFamily:this.serif, fontSize:'19px', color:C.ink } }, mat.label+' — live estimate'),
-        h('span',{ style:{ fontFamily:this.mono, fontSize:'11.5px', color:C.faint } }, '×'+mat.mult.toFixed(2)+' material · '+this.fmt(this.state.quantity)+' units')),
+        h('span',{ style:{ fontFamily:this.mono, fontSize:'11.5px', color:C.faint } }, this.fmt(this.state.quantity)+' units')),
       h('div',{ style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:'12px' } },
-        stat('Per bottle', this.money(e.costUSD), 'glass + closure', true),
+        stat('Per bottle', this.money(e.costUSD), 'bottle', true),
         stat('All-in / bottle', this.money(e.order.unitAllIn), 'incl. tooling', false),
         stat('Order total', this.money(e.order.totalOrder), this.fmt(this.state.quantity)+' bottles', false)),
-      e.order.belowMoq ? h('div',{ style:{ display:'flex', gap:'8px', alignItems:'flex-start', marginTop:'14px', fontSize:'12.5px', color:C.warn, lineHeight:1.5 } },
-        h('span',{ style:{ fontFamily:this.mono, fontWeight:700 } }, '!'),
-        h('span',null,'Order qty '+this.fmt(this.state.quantity)+' is below '+mat.label+'’s MOQ of '+this.fmt(mat.moq)+'. Raise the Order quantity in the studio’s Production tab.')) : null
+      e.order.belowMoq ? h('div',{ style:{ display:'flex', gap:'10px', alignItems:'center', marginTop:'16px', padding:'13px 15px',
+        borderRadius:'8px', background:C.redBg, border:'1.5px solid '+C.redLine, fontSize:'13.5px', color:C.red, fontWeight:600, lineHeight:1.45 } },
+        h('span',{ style:{ fontFamily:this.mono, fontWeight:800, fontSize:'16px' } }, '!'),
+        h('span',null,'Order qty '+this.fmt(this.state.quantity)+' is BELOW '+mat.label+'’s MOQ of '+this.fmt(mat.moq)+'. Raise the order quantity below or choose another material.')) : null
     );
   }
 
   // ---------- SUMMARY ----------
   screenSummary() {
-    const h=this.h, C=this.C, obj=this.estimateObject(), e=this.estimate(this.state);
+    const h=this.h, C=this.C, obj=this.estimateObject(), e=this.estimate(this.state), c=this.state.contact;
+    const warns=this.feasibility(this.state), canSend=this.emailOk();
     const row=(k,v)=>h('div',{ style:{ display:'flex', justifyContent:'space-between', gap:'16px', padding:'9px 0', borderBottom:'1px solid '+C.lineSoft } },
       h('span',{ style:{ fontSize:'13.5px', color:C.sub } }, k),
       h('span',{ style:{ fontFamily:this.mono, fontSize:'13.5px', color:C.ink, fontWeight:500, textAlign:'right' } }, v));
     return h('div',{ style:{ flex:'1', padding:'clamp(28px,5vh,56px) clamp(16px,4vw,34px) 44px', display:'flex', justifyContent:'center' } },
       h('div',{ style:{ width:'100%', maxWidth:'960px' } },
-        h('div',{ style:{ fontFamily:this.mono, fontSize:'12px', letterSpacing:'.16em', textTransform:'uppercase', color:C.A, marginBottom:'12px' } }, 'Summary'),
-        h('h1',{ style:{ fontFamily:this.serif, fontSize:'clamp(28px,4vw,42px)', fontWeight:400, margin:'0 0 28px', color:C.ink } }, 'Your bottle estimate'),
-        h('div',{ style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'28px', alignItems:'start' } },
+        h('div',{ style:{ fontFamily:this.mono, fontSize:'12px', letterSpacing:'.16em', textTransform:'uppercase', color:C.A, marginBottom:'12px' } }, 'Estimate'),
+        h('h1',{ style:{ fontFamily:this.serif, fontSize:'clamp(28px,4vw,42px)', fontWeight:400, margin:'0 0 24px', color:C.ink } }, 'Your bottle estimate'),
+        warns.length ? h('div',{ style:{ marginBottom:'24px', padding:'14px 16px', borderRadius:'10px', background:C.redBg, border:'1.5px solid '+C.redLine, color:C.red } },
+          h('div',{ style:{ fontWeight:800, fontSize:'13.5px', marginBottom:'6px', display:'flex', gap:'8px', alignItems:'center' } },
+            h('span',{ style:{ fontFamily:this.mono } }, '⚠'), warns.length+' warning'+(warns.length>1?'s':'')+' still present — included with your estimate'),
+          warns.map((w,i)=>h('div',{ key:i, style:{ fontSize:'12.5px', lineHeight:1.5, display:'flex', gap:'7px' } },
+            h('span',{ style:{ fontFamily:this.mono, fontWeight:700 } }, w.level==='error'?'✕':'!'), h('span',null,w.msg)))
+        ) : null,
+        h('div',{ className:'bs-sum-grid', style:{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'28px', alignItems:'start' } },
           h('div',null,
             h('div',{ style:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px', marginBottom:'24px' } },
               this.bigStat('Glass weight', this.fmt(e.weightG)+' g', C),
@@ -739,8 +777,7 @@ class Component extends DCLogic {
               this.bigStat('Overall height', this.fmt(e.overallHeightCm*10)+' mm', C)
             ),
             h('div',{ style:{ background:C.card, border:'1px solid '+C.line, borderRadius:'4px', padding:'20px 22px' } },
-              row('Closure', this.CLOSURES.find(c=>c.key===this.state.closure).label),
-              row('Finish', obj.finish),
+              row('Closure', this.CLOSURES.find(c2=>c2.key===this.state.closure).label),
               row('Shape', this.state.shape),
               row('Material', this.MATERIALS.find(m=>m.key===this.state.material).label),
               row('Target capacity', this.state.capacity+' ml'),
@@ -748,29 +785,81 @@ class Component extends DCLogic {
               row('All-in / bottle', this.money(e.order.unitAllIn)),
               row('Order total', this.money(e.order.totalOrder))
             ),
-            h('p',{ style:{ display:'flex', gap:'8px', fontSize:'12.5px', color:C.warn, marginTop:'16px', lineHeight:1.5 } },
-              h('span',null,'\u25B2'), h('span',null,obj.disclaimer))
+            h('p',{ style:{ display:'flex', gap:'8px', fontSize:'12.5px', color:C.red, fontWeight:600, marginTop:'16px', lineHeight:1.5 } },
+              h('span',null,'⚠'), h('span',null,'This is an estimate, ±10%. '+obj.disclaimer))
           ),
           h('div',null,
-            h('div',{ style:{ fontSize:'12.5px', fontWeight:600, color:C.sub, marginBottom:'10px', letterSpacing:'.02em' } }, 'Spec payload (handoff JSON)'),
-            h('pre',{ style:{ margin:0, background:C.stageBg, color:'#D6D2C8', borderRadius:'4px', padding:'18px',
-              fontFamily:this.mono, fontSize:'11.5px', lineHeight:1.55, overflow:'auto', maxHeight:'380px' } },
-              JSON.stringify(obj,null,2)),
-            h('div',{ style:{ display:'flex', gap:'10px', flexWrap:'wrap', marginTop:'18px' } },
-              h('button',{ 'data-press':'1', onClick:()=>this.send(),
-                style:{ flex:'1', minWidth:'150px', padding:'14px', borderRadius:'999px', background:C.ink, color:'#fff', fontSize:'14.5px', fontWeight:600 } }, 'Email estimate to sales'),
-              h('button',{ 'data-press':'1', onClick:()=>this.download(),
-                style:{ padding:'14px 20px', borderRadius:'999px', border:'1px solid '+C.line, background:'#fff', color:C.ink, fontSize:'14px', fontWeight:600 } }, 'Download .json'),
-              h('button',{ 'data-press':'1', onClick:()=>this.restart(),
-                style:{ padding:'14px 20px', borderRadius:'999px', border:'1px solid '+C.line, background:'transparent', color:C.sub, fontSize:'14px', fontWeight:500 } }, 'Start over')
+            h('div',{ style:{ background:C.card, border:'1px solid '+C.line, borderRadius:'8px', padding:'20px 22px' } },
+              h('div',{ style:{ fontFamily:this.serif, fontSize:'18px', color:C.ink, marginBottom:'4px' } }, 'Send your estimate'),
+              h('div',{ style:{ fontSize:'12.5px', color:C.sub, marginBottom:'16px', lineHeight:1.5 } }, 'We’ll generate a quote PDF you can save and share with our sales team.'),
+              h('div',{ style:{ display:'flex', flexDirection:'column', gap:'14px', marginBottom:'16px' } },
+                this.field('Email address *', c.email, v=>this.setState({contact:{...c,email:v}}), {type:'email', inputMode:'email', placeholder:'you@brand.com'}),
+                this.field('Phone (optional)', c.phone, v=>this.setState({contact:{...c,phone:v}}), {type:'tel', inputMode:'tel', placeholder:'+1 555 000 0000'}),
+                (!this.emailOk() && c.email) ? h('span',{ style:{ fontSize:'12.5px', color:C.red, display:'flex', gap:'6px' } }, h('span',null,'!'),'Enter a valid email.') : null
+              ),
+              h('button',{ 'data-press':'1', disabled:!canSend, onClick:()=>this.printQuote(),
+                style:{ width:'100%', padding:'15px', borderRadius:'999px', border:'none', background:canSend?C.ink:'#CFC8BB', color:'#fff', fontSize:'15px', fontWeight:600, cursor:canSend?'pointer':'not-allowed', marginBottom:'10px' } }, 'Download quote (PDF)'),
+              h('a',{ href:canSend?('mailto:sales@rockwoodbottle.com?subject='+encodeURIComponent('Custom bottle estimate')+'&body='+encodeURIComponent(this.mailBody())):'#',
+                onClick:(ev)=>{ if(!canSend){ ev.preventDefault(); this.flash('Enter a valid email first'); } },
+                style:{ display:'block', textAlign:'center', width:'100%', boxSizing:'border-box', padding:'13px', borderRadius:'999px', border:'1px solid '+C.line, background:'#fff', color:C.ink, fontSize:'14px', fontWeight:600, textDecoration:'none', marginBottom:'10px' } }, 'Email our sales team'),
+              h('div',{ style:{ display:'flex', gap:'10px' } },
+                h('button',{ 'data-press':'1', onClick:()=>this.download(),
+                  style:{ flex:'1', padding:'11px', borderRadius:'999px', border:'1px solid '+C.line, background:'transparent', color:C.sub, fontSize:'13px', fontWeight:600 } }, 'Spec .json'),
+                h('button',{ 'data-press':'1', onClick:()=>this.restart(),
+                  style:{ flex:'1', padding:'11px', borderRadius:'999px', border:'1px solid '+C.line, background:'transparent', color:C.sub, fontSize:'13px', fontWeight:500 } }, 'Start over'))
             )
           )
         ),
-        h('div',{ style:{ display:'flex', justifycontent:'flex-start', marginTop:'34px' } },
+        h('div',{ style:{ display:'flex', justifyContent:'flex-start', marginTop:'34px' } },
           h('button',{ 'data-press':'1', onClick:()=>this.go(this.state.idx-1),
-            style:{ padding:'12px 20px', borderRadius:'999px', border:'1px solid '+C.line, background:'transparent', color:C.ink, fontSize:'14px', fontWeight:500 } }, '\u2190 Back to studio'))
+            style:{ padding:'12px 20px', borderRadius:'999px', border:'1px solid '+C.line, background:'transparent', color:C.ink, fontSize:'14px', fontWeight:500 } }, '← Back to studio'))
       )
     );
+  }
+  mailBody() {
+    const s=this.state, e=this.estimate(s);
+    const mat=(this.MATERIALS.find(m=>m.key===s.material)||{}).label||s.material;
+    return 'Hi Rockwood team,\n\nHere is my custom bottle estimate:\n'
+      +'• Capacity: '+s.capacity+' ml\n• Shape: '+s.shape+'\n• Material: '+mat+'\n• Order qty: '+this.fmt(s.quantity)+'\n'
+      +'• Est. price/bottle: '+this.money(e.costUSD)+'\n• Order total: '+this.money(e.order.totalOrder)+'\n\n'
+      +'My contact: '+(s.contact.email||'')+' '+(s.contact.phone||'')+'\n\n(Estimate ±10%. Quote PDF generated from the configurator.)';
+  }
+  printQuote() {
+    if(!this.emailOk()){ this.flash('Enter a valid email first'); return; }
+    const s=this.state, e=this.estimate(s);
+    const mat=(this.MATERIALS.find(m=>m.key===s.material)||{}).label||s.material;
+    const clo=(this.CLOSURES.find(x=>x.key===s.closure)||{}).label||s.closure;
+    const warns=this.feasibility(s);
+    const esc=(x)=>String(x).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+    const tbl=(cls,rows)=>'<table class="'+cls+'">'+rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td></tr>').join('')+'</table>';
+    const specRows=[['Closure',clo],['Shape',s.shape],['Material',mat],['Target capacity',s.capacity+' ml'],['Order quantity',this.fmt(s.quantity)]];
+    const priceRows=[['Glass weight',this.fmt(e.weightG)+' g'],['Per bottle',this.money(e.costUSD)],['All-in / bottle',this.money(e.order.unitAllIn)],['Order total',this.money(e.order.totalOrder)]];
+    const warnHtml=warns.length?'<div class="q-warn"><div class="q-warn-h">'+warns.length+' warning'+(warns.length>1?'s':'')+' — review before production</div>'+warns.map(w=>'<div>'+(w.level==='error'?'✕':'!')+' '+esc(w.msg)+'</div>').join('')+'</div>':'';
+    const css='@media screen{#bs-print-quote{display:none}}@media print{body>*{display:none !important}#bs-print-quote{display:block !important;position:absolute;inset:0}}'
+      +'#bs-print-quote{font-family:Georgia,serif;color:#211E19;padding:14px 8px;max-width:720px;margin:0 auto}'
+      +'#bs-print-quote h1{font-size:26px;margin:0 0 2px}#bs-print-quote .q-sub{color:#736B5E;font-size:13px;margin-bottom:18px}'
+      +'#bs-print-quote h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#A9762E;margin:22px 0 6px}'
+      +'#bs-print-quote table{width:100%;border-collapse:collapse;font-size:13px}'
+      +'#bs-print-quote td{padding:7px 2px;border-bottom:1px solid #E4DDD1}#bs-print-quote td:last-child{text-align:right;font-family:ui-monospace,monospace}'
+      +'#bs-print-quote .q-meta td{border:none;color:#736B5E}'
+      +'#bs-print-quote .q-disc{margin-top:16px;padding:10px 12px;border:1.5px solid #CC2E22;color:#CC2E22;border-radius:6px;font-family:sans-serif;font-size:12.5px;font-weight:700}'
+      +'#bs-print-quote .q-warn{margin-top:14px;padding:10px 12px;background:#CC2E22;color:#fff;border-radius:6px;font-family:sans-serif;font-size:12px}'
+      +'#bs-print-quote .q-warn-h{font-weight:800;margin-bottom:5px}';
+    const now=new Date().toLocaleString();
+    const html='<style>'+css+'</style>'
+      +'<h1>Rockwood Bottle Studio</h1><div class="q-sub">Custom bottle estimate · '+esc(now)+'</div>'
+      +'<table class="q-meta"><tr><td>Contact</td><td>'+esc(s.contact.email||'-')+'</td></tr><tr><td>Phone</td><td>'+esc(s.contact.phone||'-')+'</td></tr></table>'
+      +'<h2>Bottle specification</h2>'+tbl('q-spec',specRows)
+      +'<h2>Estimate</h2>'+tbl('q-price',priceRows)
+      +'<div class="q-disc">WARNING — this is an estimate, ±10%. Placeholder pricing: naked bottle, excludes cap, label &amp; decoration.</div>'
+      +warnHtml;
+    let host=document.getElementById('bs-print-quote');
+    if(!host){ host=document.createElement('div'); host.id='bs-print-quote'; document.body.appendChild(host); }
+    host.innerHTML=html;
+    const done=()=>{ try{host.remove();}catch(err){} window.removeEventListener('afterprint',done); };
+    window.addEventListener('afterprint',done);
+    this.flash('Quote ready — choose “Save as PDF” in the print dialog');
+    setTimeout(()=>{ try{window.print();}catch(err){} }, 60);
   }
   bigStat(label, val, C, accent) {
     const h=this.h;
@@ -791,9 +880,9 @@ class Component extends DCLogic {
   // ===================== STUDIO (Step 04) =====================
   screenStudio() {
     const h=this.h, C=this.C, e=this.estimate(this.state);
-    return h('div',{ style:{ flex:'1', minHeight:0, display:'grid', gap:'0', gridTemplateColumns:'minmax(0,1fr) minmax(360px,440px)',
+    return h('div',{ style:{ flex:'1', display:'grid', gap:'0', gridTemplateColumns:'minmax(0,1fr) minmax(340px,420px)',
       alignItems:'stretch' }, className:'bs-studio' },
-      h('style',null,'@media (min-width:1025px){.bs-studio-on{height:100vh;overflow:hidden}.bs-studio{overflow:hidden}.bs-stage{min-height:0 !important;overflow:hidden}.bs-rail{min-height:0 !important;overflow:hidden}}@media (max-width:1024px){.bs-studio{grid-template-columns:1fr !important;overflow:visible}.bs-stage{min-height:0 !important;overflow:visible !important}.bs-rail{min-height:0 !important}.bs-stagewrap{min-height:62vh !important}}@media (max-width:380px){.bs-tab{font-size:11px !important;padding:11px 2px !important}.bs-refinehead{flex-wrap:wrap;gap:10px}}'),
+      h('style',null,'@media (max-width:1024px){.bs-studio{grid-template-columns:1fr !important}.bs-stage{border-right:none !important}}@media (max-width:380px){.bs-refinehead{flex-wrap:wrap;gap:10px}}'),
       this.renderStage(e),
       this.renderRail(e)
     );
@@ -857,13 +946,31 @@ class Component extends DCLogic {
     for(let i=ip.length-1;i>=0;i--) s+=' L '+(cx-ip[i].r).toFixed(2)+' '+ip[i].y.toFixed(2);
     s+=' Z'; return s;
   }
+  fillLevelY(g, e) {
+    // Geometrically accurate liquid surface: find the y where the inner volume
+    // below it equals the fill fraction of total inner volume. The px profile is a
+    // uniform scale of the real bottle, so its height/volume distribution matches.
+    const t=g.tPx, pts=g.pts;
+    const seg=pts.map(p=>({ y:p.y, a:Math.pow(Math.max(0,p.r-t),2) }));
+    let total=0;
+    for(let i=1;i<seg.length;i++){ total+=(seg[i].a+seg[i-1].a)/2*(seg[i].y-seg[i-1].y); }
+    if(total<=0) return g.yBase;
+    const target=(1-(e.fillFraction||0))*total;   // empty (headspace) volume, from the top
+    let acc=0;
+    for(let i=1;i<seg.length;i++){
+      const dy=seg[i].y-seg[i-1].y, dv=(seg[i].a+seg[i-1].a)/2*dy;
+      if(acc+dv>=target){ const f=(target-acc)/Math.max(1e-9,dv); return seg[i-1].y+f*dy; }
+      acc+=dv;
+    }
+    return g.yBase;
+  }
   renderStage(e) {
     const h=this.h, C=this.C, lit=this.props.litStage!==false;
     const g=this.buildProfile(); this.viewW=g.viewW;
     const d=this.state.dimensions, disp=this.dispNow();
     const outer=this.pathFrom(g.pts, g.cx, g.yBase);
     const inner=this.innerPath(g.pts, g.cx, g.tPx, g.yBase);
-    const fillTop=g.ySdrTop+(1-e.fillFraction)*(g.yBase-g.ySdrTop);
+    const fillTop=this.fillLevelY(g, e);
     const feas=this.feasSummary(this.state);
     const fcol={ ok:C.ok, warn:C.warn, error:C.err }[feas.level];
     // handles
@@ -883,34 +990,11 @@ class Component extends DCLogic {
     return h('section',{ style:{ position:'relative', display:'flex', flexDirection:'column',
       background:lit?'radial-gradient(120% 80% at 50% 22%, #23252C 0%, #16171A 62%, #101115 100%)':C.stagePanel,
       borderRight:'1px solid '+C.stageLine, overflow:'hidden', minHeight:'520px' }, className:'bs-stage' },
-      // feasibility pill
-      h('div',{ style:{ position:'absolute', top:'18px', left:'18px', zIndex:5, maxWidth:'330px' } },
-        h('button',{ 'data-press':'1', onClick:()=>this.setState(s=>({feasOpen:!s.feasOpen})),
-          'aria-expanded':this.state.feasOpen,
-          style:{ display:'inline-flex', alignItems:'center', gap:'9px', padding:'8px 14px', borderRadius:'999px',
-            background:fcol+'22', border:'1px solid '+fcol+'66', color:fcol, fontSize:'13px', fontWeight:600 } },
-          h('span',{ style:{ fontFamily:this.mono } }, feas.glyph), feas.text,
-          h('span',{ style:{ fontSize:'10px', opacity:.7, transform:this.state.feasOpen?'rotate(180deg)':'none', transition:'transform .2s' } }, '\u25BE')),
-        this.state.feasOpen && feas.list.length ? h('div',{ style:{ marginTop:'8px', background:C.stagePanel, border:'1px solid '+C.stageLine,
-          borderRadius:'6px', padding:'10px 12px', display:'flex', flexDirection:'column', gap:'8px', boxShadow:'0 18px 40px -16px rgba(0,0,0,.6)' } },
-          feas.list.map((x,i)=>{ const cc={ok:C.ok,warn:C.warn,error:C.err,info:C.stageSub}[x.level==='error'?'error':x.level==='warn'?'warn':'info'];
-            const gl={ error:'\u2715', warn:'!', info:'i' }[x.level];
-            return h('div',{ key:i, style:{ display:'flex', gap:'9px', fontSize:'12px', color:C.stageInk, lineHeight:1.45 } },
-              h('span',{ style:{ color:cc, fontFamily:this.mono, fontWeight:700, flex:'0 0 auto', marginTop:'1px' } }, gl),
-              h('div',{ style:{ display:'flex', flexDirection:'column', gap:'6px', alignItems:'flex-start' } },
-                h('span',null, x.msg),
-                x.fix ? h('button',{ 'data-press':'1', type:'button', onClick:()=>this.goFix(x.fix),
-                  style:{ display:'inline-flex', alignItems:'center', gap:'6px', padding:'4px 10px', borderRadius:'999px',
-                    border:'1px solid '+cc+'66', background:cc+'1F', color:cc, fontSize:'11px', fontWeight:600, cursor:'pointer' } },
-                  h('span',{ style:{ fontWeight:700 } }, '\u2192'), x.fix.hint) : null
-              )); })
-        ) : this.state.feasOpen ? h('div',{ style:{ marginTop:'8px', background:C.stagePanel, border:'1px solid '+C.stageLine, borderRadius:'6px', padding:'10px 12px', fontSize:'12px', color:C.stageSub } }, 'No flags \u2014 fully buildable.') : null
-      ),
       // footprint card
       h('div',{ style:{ position:'absolute', top:'18px', right:'18px', zIndex:5 } }, this.renderFootprint()),
       // SVG
       h('div',{ className:'bs-stagewrap', style:{ flex:'1', display:'grid', placeItems:'center', padding:'34px 18px 18px', minHeight:0 } },
-        h('svg',{ ref:el=>this._svg=el, viewBox:'0 0 '+g.viewW+' '+g.viewH, style:{ width:'auto', height:'100%', maxHeight:'min(72vh,640px)', maxWidth:'100%', overflow:'visible', touchAction:'none' } },
+        h('svg',{ ref:el=>this._svg=el, viewBox:'0 0 '+g.viewW+' '+g.viewH, preserveAspectRatio:'xMidYMid meet', style:{ width:'100%', height:'auto', maxHeight:'min(60vh,580px)', overflow:'visible', touchAction:'none' } },
           h('defs',null,
             inner?h('clipPath',{ id:'bsInner' }, h('path',{ d:inner })):null,
             h('linearGradient',{ id:'bsGlass', x1:'0', y1:'0', x2:'1', y2:'0' },
@@ -930,10 +1014,10 @@ class Component extends DCLogic {
           h('path',{ d:outer, fill:'url(#bsGlass)', stroke:lit?'#0C0D10':'#B7B1A4', strokeWidth:1.4, strokeLinejoin:'round' }),
           // liquid fill (clipped)
           inner?h('g',{ clipPath:'url(#bsInner)' },
-            h('rect',{ x:g.cx-g.rS-20, y:fillTop, width:(g.rS+20)*2, height:g.yBase-fillTop+4, fill:'url(#bsLiq)' }),
-            fillTop>g.ySdrTop+0.5?h('rect',{ x:g.cx-g.rS-20, y:g.ySdrTop, width:(g.rS+20)*2, height:fillTop-g.ySdrTop, fill:'url(#bsHatch)' }):null,
-            h('line',{ x1:g.cx-g.rS-20, y1:fillTop, x2:g.cx+g.rS+20, y2:fillTop, stroke:C.A, strokeWidth:1.2, strokeOpacity:.9 }),
-            h('line',{ x1:g.cx-g.rS-20, y1:g.ySdrTop, x2:g.cx+g.rS+20, y2:g.ySdrTop, stroke:lit?'#FFFFFF':C.sub, strokeWidth:1, strokeDasharray:'4 3', strokeOpacity:lit?.55:.7 })
+            h('rect',{ x:0, y:fillTop, width:g.viewW, height:g.yBase-fillTop+4, fill:'url(#bsLiq)' }),
+            fillTop>g.ySdrTop+0.5?h('rect',{ x:0, y:g.ySdrTop, width:g.viewW, height:fillTop-g.ySdrTop, fill:'url(#bsHatch)' }):null,
+            h('line',{ x1:0, y1:fillTop, x2:g.viewW, y2:fillTop, stroke:C.A, strokeWidth:1.2, strokeOpacity:.9 }),
+            h('line',{ x1:0, y1:g.ySdrTop, x2:g.viewW, y2:g.ySdrTop, stroke:lit?'#FFFFFF':C.sub, strokeWidth:1, strokeDasharray:'4 3', strokeOpacity:lit?.55:.7 })
           ):null,
           // inner wall dashed
           inner?h('path',{ d:inner, fill:'none', stroke:lit?'#9AA0AD':'#9A9183', strokeWidth:.9, strokeDasharray:'3 3', strokeOpacity:.55 }):null,
@@ -948,7 +1032,8 @@ class Component extends DCLogic {
           hHandles.map(hd=>this.handle(hd,'height',g,lit))
         )
       ),
-      // DOCK
+      // warnings below the bottle, then the metrics dock
+      this.renderStageWarnings(lit),
       this.renderDock(e, lit)
     );
   }
@@ -1007,6 +1092,19 @@ class Component extends DCLogic {
         this.fmt(this.toDisp(w),this.state.units==='mm'?0:1)+' \u00d7 '+this.fmt(this.toDisp(dep),this.state.units==='mm'?0:1)+' '+this.state.units)
     );
   }
+  renderStageWarnings(lit) {
+    const h=this.h, C=this.C, list=this.feasibility(this.state);
+    if(!list.length) return null;
+    const errs=list.filter(x=>x.level==='error').length;
+    const head=(errs?errs+' issue'+(errs>1?'s':''):list.length+' warning'+(list.length>1?'s':''))+' — please review before you continue';
+    return h('div',{ className:'bs-warns', style:{ background:C.red, color:'#fff', padding:'12px clamp(16px,3vw,26px)', display:'flex', flexDirection:'column', gap:'7px', flex:'0 0 auto', maxHeight:'34vh', overflowY:'auto' } },
+      h('div',{ style:{ display:'flex', alignItems:'center', gap:'8px', fontWeight:800, fontSize:'13.5px' } },
+        h('span',{ style:{ fontFamily:this.mono, fontSize:'15px' } }, '⚠'), head),
+      list.map((x,i)=>h('div',{ key:i, style:{ display:'flex', gap:'8px', alignItems:'flex-start', fontSize:'12.5px', lineHeight:1.45 } },
+        h('span',{ style:{ fontFamily:this.mono, fontWeight:700, flex:'0 0 auto' } }, x.level==='error'?'✕':'!'),
+        h('span',null, x.msg+((x.fix&&x.fix.hint)?'  → '+x.fix.hint:''))))
+    );
+  }
   renderDock(e, lit) {
     const h=this.h, C=this.C, disp=this.dispNow();
     const cell=(label,val,sub)=>h('div',{ style:{ display:'flex', flexDirection:'column', gap:'2px', minWidth:0 } },
@@ -1017,6 +1115,8 @@ class Component extends DCLogic {
     return h('div',{ className:'bs-dock', style:{ borderTop:'1px solid '+C.stageLine, background:lit?'#101115EE':C.card,
       backdropFilter:'blur(8px)', padding:'14px clamp(16px,3vw,26px)', display:'flex', alignItems:'center', gap:'22px', flexWrap:'wrap' } },
       h('style',null,'@media (max-width:600px){.bs-dock{gap:14px}.bs-metrics{grid-template-columns:1fr 1fr !important}}@media (max-width:360px){.bs-dock{flex-direction:column;align-items:flex-start;gap:12px}.bs-metrics{width:100%}.bs-dock>div:last-child{border-left:none;padding-left:0}}'),
+      h('div',{ style:{ flexBasis:'100%', display:'flex', alignItems:'center', gap:'8px', padding:'9px 13px', borderRadius:'8px', background:C.red, color:'#fff', fontSize:'12.5px', fontWeight:700, letterSpacing:'.02em' } },
+        h('span',{ style:{ fontFamily:this.mono, fontSize:'14px' } }, '⚠'), 'WARNING — this is an estimate, ±10%'),
       h('div',{ className:'bs-metrics', style:{ display:'grid', gridTemplateColumns:'repeat(4,auto)', gap:'18px 26px', flex:'1' } },
         cell('Overall', this.fmt(cv(disp.overallHeightCm), u==='mm'?0:1)+' '+u),
         cell('Fill', this.fmt(disp.fillMl,0)+' ml', 'brimful '+this.fmt(disp.brimfulMl,0)+' · '+Math.round(this.state.dimensions.headspace*100)+'% ullage'),
@@ -1034,54 +1134,44 @@ class Component extends DCLogic {
   // ---------- RAIL ----------
   renderRail(e) {
     const h=this.h, C=this.C;
-    const tabs=[ {k:'size',l:'Size'},{k:'finish',l:'Finish'},{k:'base',l:'Base'},{k:'production',l:'Production'} ];
     return h('aside',{ style:{ display:'flex', flexDirection:'column', background:C.paper, minHeight:0 }, className:'bs-rail' },
-      // presets + simple/advanced
+      // header + presets
       h('div',{ style:{ padding:'18px clamp(16px,2.4vw,22px) 14px', borderBottom:'1px solid '+C.line } },
-        h('div',{ className:'bs-refinehead', style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' } },
-          h('span',{ style:{ fontFamily:this.serif, fontSize:'18px', color:C.ink } }, 'Refine the glass'),
-          h('div',{ style:{ display:'inline-flex', border:'1px solid '+C.line, borderRadius:'999px', overflow:'hidden' } },
-            [['simple','Simple',false],['advanced','Advanced',true]].map(([id,l,adv])=>h('button',{ key:id, 'data-press':'1',
-              onClick:()=>this.setState({advanced:adv}),
-              style:{ padding:'6px 13px', fontSize:'12px', fontWeight:600, color:this.state.advanced===adv?'#fff':C.sub,
-                background:this.state.advanced===adv?C.ink:'transparent' } }, l)))
-        ),
+        h('div',{ className:'bs-refinehead', style:{ marginBottom:'12px' } },
+          h('span',{ style:{ fontFamily:this.serif, fontSize:'18px', color:C.ink } }, 'Refine the bottle')),
         this.renderTemplates()
       ),
-      // tabs
-      h('div',{ style:{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', borderBottom:'1px solid '+C.line, background:C.paper, position:'sticky', top:0, zIndex:2 } },
-        tabs.map(t=>{ const a=this.state.activeTab===t.k; return h('button',{ key:t.k, 'data-press':'1', className:'bs-tab', onClick:()=>this.setState({activeTab:t.k}),
-          style:{ padding:'13px 4px', fontSize:'13px', fontWeight:a?700:500, color:a?C.ink:C.sub,
-            borderBottom:'2px solid '+(a?C.A:'transparent'), background:'transparent' } }, t.l); })
-      ),
-      // scrolling body
+      // scrolling body — Size + Base merged into one page
       h('div',{ style:{ flex:'1', overflowY:'auto', padding:'18px clamp(16px,2.4vw,22px) 20px' } },
-        this.renderTabBody(e)
+        this.renderControls(e)
       ),
       // pinned footer
       h('div',{ style:{ borderTop:'1px solid '+C.line, padding:'14px clamp(16px,2.4vw,22px)', display:'flex', gap:'10px', background:C.paper } },
-        h('button',{ 'data-press':'1', onClick:()=>this.toggleHold(), 'aria-pressed':this.state.holdCapacity,
-          style:{ flex:'1', padding:'12px', borderRadius:'999px', border:'1px solid '+(this.state.holdCapacity?C.A:C.line), background:'#fff', color:this.state.holdCapacity?C.A:C.ink, fontSize:'13.5px', fontWeight:600 } }, (this.state.holdCapacity?'🔒 Holding ':'🔓 Hold ')+this.state.capacity+' ml'),
         h('button',{ 'data-press':'1', onClick:()=>this.go(this.state.idx+1),
-          style:{ flex:'1', padding:'12px', borderRadius:'999px', background:C.ink, color:'#fff', fontSize:'13.5px', fontWeight:600 } }, 'Material \u2192')
+          style:{ flex:'1', padding:'13px', borderRadius:'999px', background:C.ink, color:'#fff', fontSize:'13.5px', fontWeight:600 } }, 'Glass & quantity \u2192')
       )
     );
   }
-  renderTabBody(e) {
-    const t=this.state.activeTab;
-    if(t==='size') return this.tabSize();
-    if(t==='finish') return this.tabFinish();
-    if(t==='base') return this.tabBase();
-    return this.tabProduction(e);
+  renderControls(e) {
+    const h=this.h, C=this.C;
+    const head=(t)=>h('div',{ style:{ fontSize:'11px', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:C.sub, margin:'0 0 12px' } }, t);
+    return h('div',null,
+      head('Size'),
+      this.numRow('shoulderWidth','Body \u00d8 (at shoulder)',{tag:'drag \u2194'}),
+      this.lockedBodyRow(),
+      h('div',{ style:{ height:'22px' } }),
+      head('Base'),
+      this.numRow('baseWidth','Base \u00d8',{tag:'drag \u2194'}),
+      this.numRow('slug','Base glass thickness',{tag:'drag \u2195'}),
+      this.sliderRow('heelRadius','Heel roundness',v=>v.toFixed(2),{ends:['sharp','round']}),
+      this.numRow('punt','Push-up (punt) depth')
+    );
   }
 
   goFix(fix) {
     if(!fix) return;
-    if(fix.action==='match'){ this.setState({ activeTab:fix.tab||'size', feasOpen:false }); this.matchCapacity(); return; }
-    const patch={ activeTab:fix.tab, feasOpen:false };
-    if(fix.adv) patch.advanced=true;
-    this.setState(patch);
-    this.flash(fix.hint);
+    this.setState({ feasOpen:false });
+    if(fix.hint) this.flash(fix.hint);
     try { const rail=document.querySelector('.bs-rail'); if(rail && window.innerWidth<=1024){ const top=rail.getBoundingClientRect().top+window.scrollY-12; window.scrollTo({ top, behavior:this.reduced()?'auto':'smooth' }); } } catch(err){}
   }
   helpDot(key) {
@@ -1159,124 +1249,6 @@ class Component extends DCLogic {
       opts.ends?h('div',{ style:{ display:'flex', justifyContent:'space-between', fontSize:'10.5px', color:C.faint, marginTop:'4px' } },
         h('span',null,opts.ends[0]), h('span',null,opts.ends[1])):null
     );
-  }
-  wallSlider() {
-    const h=this.h, C=this.C, v=this.state.wall;
-    return h('div',{ style:{ marginBottom:'18px' } },
-      h('div',{ style:{ display:'flex', justifyContent:'space-between', marginBottom:'8px' } },
-        h('span',{ style:{ display:'inline-flex', alignItems:'center', gap:'6px' } },
-          h('span',{ style:{ fontSize:'13.5px', fontWeight:500, color:C.ink } }, 'Wall profile'), this.helpDot('wall')),
-        h('span',{ style:{ fontFamily:this.mono, fontSize:'12.5px', color:C.A, fontWeight:600 } }, v===0?'straight':v>0?'+'+v.toFixed(2)+' convex':v.toFixed(2)+' concave')),
-      h('input',{ type:'range', min:-1, max:1, step:0.05, value:v,
-        onChange:ev=>this.setField({wall:parseFloat(ev.target.value)}), style:{ width:'100%' } }),
-      h('div',{ style:{ display:'flex', justifyContent:'space-between', fontSize:'10.5px', color:C.faint, marginTop:'4px' } },
-        h('span',null,'concave'), h('span',null,'convex'))
-    );
-  }
-  tabSize() {
-    const h=this.h, adv=this.state.advanced;
-    return h('div',null,
-      this.numRow('shoulderWidth','Body \u00d8 (at shoulder)',{tag:'drag \u2194'}),
-      this.state.holdCapacity ? this.lockedBodyRow() : this.numRow('body','Body height',{tag:'drag \u2195'}),
-      this.numRow('baseWidth','Base \u00d8',{tag:'drag \u2194'}),
-      adv?h('div',null,
-        this.state.shape==='oval'?this.numRow('bodyDepth','Body depth (Y)'):null,
-        this.numRow('shoulderHeight','Shoulder height',{tag:'drag \u2195'}),
-        this.sliderRow('shoulderRadius','Shoulder roundness',v=>v.toFixed(2),{ends:['sharp','round']}),
-        this.wallSlider(),
-        this.numRow('wallThickness','Wall thickness')
-      ):this.hintMore()
-    );
-  }
-  tabFinish() {
-    const h=this.h, C=this.C, adv=this.state.advanced;
-    const cur=this.state.finish;
-    return h('div',null,
-      h('div',{ style:{ fontSize:'12.5px', fontWeight:600, color:C.sub, marginBottom:'9px' } }, 'Standard finish'),
-      h('div',{ style:{ display:'flex', flexDirection:'column', gap:'7px', marginBottom:'18px' } },
-        this.FINISHES.map(f=>{ const a=cur===f.key, compat=f.closures.includes(this.state.closure);
-          return h('button',{ key:f.key, 'data-press':'1', onClick:()=>this.setFinish(f.key),
-            style:{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'11px 13px', borderRadius:'6px',
-              border:'1px solid '+(a?C.A:C.line), background:a?'#fff':C.card, textAlign:'left' } },
-            h('span',null,
-              h('div',{ style:{ fontSize:'13.5px', fontWeight:600, color:C.ink } }, f.name+'  ',
-                !compat?h('span',{ style:{ color:C.warn, fontSize:'11px' } }, ' ! closure'):null),
-              h('div',{ style:{ fontSize:'11px', color:C.sub } }, f.style+' \u00b7 '+f.std)),
-            h('span',{ style:{ fontFamily:this.mono, fontSize:'10.5px', color:C.faint, textAlign:'right' } }, 'T'+f.T+' I'+f.I)
-          ); })
-      ),
-      this.numRow('mouth','Thread \u00d8 (T)',{tag:'drag \u2194'}),
-      this.numRow('finishHeight','Finish height (H)',{tag:'drag \u2195'}),
-      this.numRow('neckWidth','Neck \u00d8',{tag:'drag \u2194'}),
-      this.numRow('neck','Neck height',{tag:'drag \u2195'}),
-      adv?this.numRow('bore','Bore / throat \u00d8 (I)'):this.hintMore()
-    );
-  }
-  tabBase() {
-    const h=this.h, adv=this.state.advanced;
-    return h('div',null,
-      this.numRow('baseWidth','Base \u00d8',{tag:'drag \u2194'}),
-      this.numRow('slug','Base glass thickness',{tag:'drag \u2195'}),
-      this.sliderRow('heelRadius','Heel roundness',v=>v.toFixed(2),{ends:['sharp','round']}),
-      this.numRow('punt','Push-up (punt) depth'),
-      adv?null:this.hintMore()
-    );
-  }
-  tabProduction(e) {
-    const h=this.h, C=this.C, adv=this.state.advanced;
-    const seg=(label,opts,val,onPick,helpKey)=>h('div',{ style:{ marginBottom:'16px' } },
-      h('div',{ style:{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12.5px', fontWeight:600, color:C.sub, marginBottom:'8px' } }, label, helpKey?this.helpDot(helpKey):null),
-      h('div',{ style:{ display:'flex', gap:'6px', flexWrap:'wrap' } },
-        opts.map(o=>h('button',{ key:o.v, 'data-press':'1', onClick:()=>onPick(o.v),
-          style:{ padding:'8px 12px', borderRadius:'999px', border:'1px solid '+(val===o.v?C.A:C.line),
-            background:val===o.v?'#fff':C.card, color:val===o.v?C.A:C.sub, fontSize:'12.5px', fontWeight:600 } }, o.l))));
-    const ro=(label,val)=>h('div',{ style:{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid '+C.lineSoft } },
-      h('span',{ style:{ fontSize:'12.5px', color:C.sub } }, label),
-      h('span',{ style:{ fontFamily:this.mono, fontSize:'12.5px', color:C.ink, fontWeight:500 } }, val));
-    const u=this.state.units, cv=v=>u==='mm'?v*10:v;
-    return h('div',null,
-      seg('Fill type', this.FILLTYPES.map(f=>({v:f.key,l:f.label})), this.state.fillType, v=>this.setFill(v), 'fillType'),
-      seg('Material', this.MATERIALS.map(m=>({v:m.key,l:m.label})), this.state.material, v=>this.setField({material:v}), 'material'),
-      adv?seg('Forming process', [{v:'bb',l:'Blow\u2013Blow'},{v:'nnpb',l:'Press\u2013Blow / NNPB'}], this.state.process, v=>this.setField({process:v}), 'process'):null,
-      adv?this.sliderRow('headspace','Headspace (ullage)',v=>Math.round(v*100)+'%'):null,
-      h('div',{ style:{ marginBottom:'18px' } },
-        h('div',{ style:{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12.5px', fontWeight:600, color:C.sub, marginBottom:'8px' } }, 'Order quantity', this.helpDot('quantity')),
-        h('input',{ type:'number', value:this.state.quantity, min:1,
-          onChange:ev=>this.setField({quantity:Math.max(1,parseInt(ev.target.value||'1',10))}),
-          style:{ width:'100%', padding:'11px 13px', borderRadius:'6px', border:'1px solid '+C.line, background:'#fff', fontFamily:this.mono, fontSize:'15px', color:C.ink } })),
-      // secondary readouts
-      h('div',{ style:{ background:C.card, border:'1px solid '+C.line, borderRadius:'8px', padding:'4px 14px 10px', marginBottom:'16px' } },
-        h('div',{ style:{ fontSize:'11px', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:C.sub, padding:'12px 0 4px' } }, 'Engineering readouts'),
-        ro('Brimful', this.fmt(e.brimfulMl,0)+' ml'),
-        ro('Min wall', this.fmt(cv(e.minWallMm/10), u==='mm'?2:3)+' '+u + (e.minWallMm<1?'  !':'')),
-        ro('Wrap-label area', this.fmt(e.wrapLabelCm2,0)+' cm\u00b2'),
-        ro('Tol. height', '\u00b1'+e.tol.heightMm.toFixed(2)+' mm'),
-        ro('Tol. \u00d8', '\u00b1'+e.tol.diaMm.toFixed(2)+' mm'),
-        ro('Tol. capacity', '\u00b1'+e.tol.capPct+'%')
-      ),
-      // order summary
-      h('div',{ style:{ background:C.ink, color:'#fff', borderRadius:'8px', padding:'4px 16px 14px' } },
-        h('div',{ style:{ fontSize:'11px', fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:C.A, padding:'13px 0 4px' } }, 'Order'),
-        this.orderRow('Unit cost', this.money(e.order.unitCost)),
-        this.orderRow('Tooling / unit', this.money(e.order.toolingPerUnit)),
-        this.orderRow('All-in / bottle', this.money(e.order.unitAllIn), true),
-        this.orderRow('Order total', this.money(e.order.totalOrder)),
-        e.order.belowMoq?h('div',{ style:{ display:'flex', gap:'7px', marginTop:'10px', fontSize:'11.5px', color:'#E8B45A', lineHeight:1.4 } },
-          h('span',null,'!'), 'Below MOQ of '+this.fmt(e.order.moq)+' for '+this.MATERIALS.find(m=>m.key===this.state.material).label+'.'):null
-      )
-    );
-  }
-  orderRow(label,val,big) {
-    const h=this.h;
-    return h('div',{ style:{ display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:big?'9px 0':'6px 0', borderTop:big?'1px solid rgba(255,255,255,.14)':'none' } },
-      h('span',{ style:{ fontSize:big?'13px':'12.5px', color:big?'#fff':'rgba(255,255,255,.7)', fontWeight:big?600:400 } }, label),
-      h('span',{ style:{ fontFamily:this.mono, fontSize:big?'17px':'13px', color:'#fff', fontWeight:big?700:500 } }, val));
-  }
-  hintMore() {
-    const h=this.h, C=this.C;
-    return h('button',{ 'data-press':'1', onClick:()=>this.setState({advanced:true}),
-      style:{ marginTop:'4px', fontSize:'12.5px', color:C.A, fontWeight:600, display:'flex', gap:'6px', alignItems:'center' } },
-      '+ Show advanced parameters');
   }
 }
 </script>
