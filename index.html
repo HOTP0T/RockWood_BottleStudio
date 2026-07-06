@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Hide the raw DC template (the literal {{ app }} placeholder) until the runtime mounts #dc-root. Prevents the flash of unparsed template on load. -->
+<style>html,body{margin:0;background:#F6F3ED}x-dc{visibility:hidden}#dc-root{visibility:visible}</style>
 </head>
 <body>
 <x-dc>
