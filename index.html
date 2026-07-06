@@ -313,24 +313,62 @@ class Component extends DCLogic {
     };
     this._raf=requestAnimationFrame(step);
   }
+  // ---- capacity-hold helpers (solve body height ATOMICALLY inside the state update) ----
+  holdsCapacity(st, dims) {
+    const fill=this.estimate({ ...st, dimensions:dims }).fillMl;
+    return Math.abs(fill - st.capacity) <= Math.max(1, st.capacity*0.01);
+  }
+  heldDims(st, dims) {
+    if(!st.holdCapacity) return dims;
+    return { ...dims, body:this.solveBodyForCapacity({ ...st, dimensions:dims }) };
+  }
+  fitWidthToCapacity(st, dims) {
+    // Body height alone can't reach the target capacity — scale the body envelope to fit.
+    let d={ ...dims };
+    for(let i=0;i<8 && !this.holdsCapacity(st, this.heldDims(st, d)); i++){
+      const fill=this.estimate({ ...st, dimensions:this.heldDims(st, d) }).fillMl;
+      const s=Math.sqrt(this.clamp(st.capacity/Math.max(1,fill), 0.55, 1.8));
+      ['shoulderWidth','baseWidth','bodyDepth'].forEach(k=>{ const r=this.RANGES[k]; d[k]=this.clamp(d[k]*s, r[0], r[1]); });
+    }
+    return this.heldDims(st, d);
+  }
   setDim(key, val) {
     const r=this.RANGES[key]; if(r) val=this.clamp(val, r[0], r[1]);
+    let blocked=false;
     this.setState(st=>{
-      const dm={...st.dimensions, [key]:val};
+      let dm={ ...st.dimensions, [key]:val };
       if(key==='mouth') dm.mouth=Math.max(dm.mouth, st.dimensions.neckWidth);
       else if(key==='neckWidth') dm.neckWidth=Math.min(dm.neckWidth, st.dimensions.mouth);
+      if(st.holdCapacity && key!=='body'){
+        dm=this.heldDims(st, dm);
+        // Capacity is king: block a reshape that would break the target, unless it moves toward feasibility.
+        if(!this.holdsCapacity(st, dm)){
+          const curDrift=Math.abs(this.estimate(st).fillMl - st.capacity);
+          const newDrift=Math.abs(this.estimate({ ...st, dimensions:dm }).fillMl - st.capacity);
+          if(newDrift >= curDrift-1e-6){ blocked=true; return { dimensions:st.dimensions }; }
+        }
+      }
       return { dimensions:dm };
-    }, ()=>this.afterChange(key));
+    }, ()=>{ if(blocked && !this.state.dragging) this.flash('Can’t go further — that would break the '+this.fmt(this.state.capacity)+' ml target'); this.tween(); });
   }
-  setField(patch) { this.setState(patch, ()=>this.afterChange()); }
-  setCapacity(v) { this.setState({ capacity:Math.max(10, v||0) }, ()=>this.afterChange()); }
+  setField(patch) {
+    this.setState(st=>{ const ns={ ...st, ...patch }; return { ...patch, dimensions:this.heldDims(ns, st.dimensions) }; }, ()=>this.tween());
+  }
+  setCapacity(v) {
+    this.setState(st=>{
+      const cap=Math.max(10, v||0), ns={ ...st, capacity:cap };
+      let dims=this.heldDims(ns, st.dimensions);
+      if(st.holdCapacity && !this.holdsCapacity(ns, dims)) dims=this.fitWidthToCapacity(ns, st.dimensions);
+      return { capacity:cap, dimensions:dims };
+    }, ()=>this.tween());
+  }
   setFill(key) {
     const f=this.FILLTYPES.find(x=>x.key===key);
-    this.setState(st=>({ fillType:key, dimensions:{...st.dimensions, headspace:f?f.hs:st.dimensions.headspace} }), ()=>this.afterChange());
+    this.setState(st=>{ const dm={ ...st.dimensions, headspace:f?f.hs:st.dimensions.headspace }; return { fillType:key, dimensions:this.heldDims(st, dm) }; }, ()=>this.tween());
   }
   setFinish(key) {
     const f=this.FINISHES.find(x=>x.key===key); if(!f) return;
-    this.setState(st=>({ finish:key, dimensions:{...st.dimensions, mouth:f.T, bore:f.I, finishHeight:f.H, neckWidth:Math.min(st.dimensions.neckWidth, f.T)} }), ()=>this.afterChange());
+    this.setState(st=>{ const dm={ ...st.dimensions, mouth:f.T, bore:f.I, finishHeight:f.H, neckWidth:Math.min(st.dimensions.neckWidth, f.T) }; return { finish:key, dimensions:this.heldDims(st, dm) }; }, ()=>this.tween());
   }
   DEFAULT_FINISH = { 'screw-cap':'28-400', 't-cap':'cork-185', 'mouth-ring':'crown-26' };
   setClosure(key) {
@@ -340,21 +378,33 @@ class Component extends DCLogic {
   }
   applyPreset(p) {
     const d={ ...this.baseDims(), ...(p.d||{}) }; d.neckWidth=Math.min(d.neckWidth, d.mouth);
-    const patch={ dimensions:d };
-    if(p.cap!=null) patch.capacity=p.cap;
-    if(p.shape) patch.shape=p.shape;
-    if(p.finish) patch.finish=p.finish;
-    if(p.closure) patch.closure=p.closure;
-    this.setState(patch, ()=>this.afterChange('__nosolve'));
+    this.setState(st=>{
+      const cap = p.cap!=null ? p.cap : st.capacity;
+      const ns={ ...st, capacity:cap, shape:p.shape||st.shape };
+      let dims=this.heldDims(ns, d);
+      if(st.holdCapacity && !this.holdsCapacity(ns, dims)) dims=this.fitWidthToCapacity(ns, d);
+      const patch={ dimensions:dims, capacity:cap };
+      if(p.shape) patch.shape=p.shape;
+      if(p.finish) patch.finish=p.finish;
+      if(p.closure) patch.closure=p.closure;
+      return patch;
+    }, ()=>this.tween());
   }
   renderTemplates() {
-    const h=this.h, C=this.C;
-    const list=(this.state.templates && this.state.templates[this.state.shape]) || [];
-    if(!list.length) return h('div',{ style:{ fontSize:'11.5px', color:C.faint, fontStyle:'italic' } }, 'No templates for the '+this.state.shape+' shape yet — add one in templates/'+this.state.shape+'.json');
-    return h('div',{ style:{ display:'flex', gap:'7px', flexWrap:'wrap' } },
-      list.map(p=>h('button',{ key:p.key, 'data-press':'1', onClick:()=>this.applyPreset(p),
-        style:{ padding:'7px 12px', borderRadius:'999px', border:'1px solid '+C.line, background:C.card,
-          fontSize:'12px', color:C.ink, fontWeight:500 } }, p.label)));
+    const h=this.h, C=this.C, cap=this.state.capacity;
+    const all=(this.state.templates && this.state.templates[this.state.shape]) || [];
+    // Only show templates whose capacity is within ±15% of the chosen target.
+    const list=all.filter(p=> p.cap==null || Math.abs(p.cap-cap) <= 0.15*cap);
+    const note=(txt)=>h('div',{ style:{ fontSize:'11.5px', color:C.faint, fontStyle:'italic' } }, txt);
+    if(!all.length) return note('No templates for the '+this.state.shape+' shape yet — add one in templates/'+this.state.shape+'.json');
+    if(!list.length) return note('No '+this.state.shape+' templates within ±15% of '+this.fmt(cap)+' ml.');
+    return h('div',null,
+      h('div',{ style:{ fontSize:'11px', color:C.faint, marginBottom:'8px' } }, 'Templates near '+this.fmt(cap)+' ml (±15%)'),
+      h('div',{ style:{ display:'flex', gap:'7px', flexWrap:'wrap' } },
+        list.map(p=>h('button',{ key:p.key, 'data-press':'1', onClick:()=>this.applyPreset(p),
+          style:{ padding:'7px 12px', borderRadius:'999px', border:'1px solid '+C.line, background:C.card,
+            fontSize:'12px', color:C.ink, fontWeight:500 } }, p.label)))
+    );
   }
   solveBodyForCapacity(s) {
     // pure: returns body height so estimate(...).fillMl ~= s.capacity, clamped to RANGES.body
