@@ -37,6 +37,14 @@
   @keyframes bsFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   @keyframes bsToast{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
   @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+  /* touch smoothness */
+  [data-press]{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  [data-handle]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:none}
+  input,button,a,label{-webkit-tap-highlight-color:transparent}
+  @media (pointer:coarse){
+    input[type=range]::-webkit-slider-thumb{height:26px;width:26px;margin-top:-11px}
+    input[type=range]::-moz-range-thumb{height:24px;width:24px}
+  }
 </style>
 </helmet>
 <div data-root style="min-height:100vh;background:#F6F3ED">{{ app }}</div>
@@ -186,11 +194,17 @@ class Component extends DCLogic {
     if(!this.state.disp) this.setState({ disp:this.metricsFrom(this.estimate(this.state)) });
     this._mv = (e)=>this.onMove(e);
     this._up = (e)=>this.onUp(e);
-    this._rz = ()=>{ if(this._rzraf) return; this._rzraf=requestAnimationFrame(()=>{ this._rzraf=0; this.forceUpdate(); }); };
+    this._rz = ()=>{ if(this._rzraf) return; this._rzraf=requestAnimationFrame(()=>{ this._rzraf=0; this.syncHH(); this.forceUpdate(); }); };
     window.addEventListener('pointermove', this._mv, { passive:false });
     window.addEventListener('pointerup', this._up);
     window.addEventListener('resize', this._rz);
     this.loadTemplates();
+    requestAnimationFrame(()=>this.syncHH());
+    try { if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>this.syncHH()); } catch(e){}
+  }
+  // Publish the sticky header's height so the mobile studio can stick the bottle just beneath it.
+  syncHH() {
+    try { const hdr=document.querySelector('.bs-header'); if(hdr) document.documentElement.style.setProperty('--bs-hh', Math.round(hdr.offsetHeight)+'px'); } catch(e){}
   }
   componentWillUnmount() {
     window.removeEventListener('pointermove', this._mv);
@@ -771,11 +785,7 @@ class Component extends DCLogic {
               h('span',null,'MOQ '+this.fmt(m.moq))
             )
           ) }))),
-        h('div',{ style:{ marginTop:'24px', maxWidth:'340px' } },
-          h('div',{ style:{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12.5px', fontWeight:600, color:C.sub, marginBottom:'8px' } }, 'Order quantity', this.helpDot('quantity')),
-          h('input',{ type:'number', value:this.state.quantity, min:1, inputMode:'numeric',
-            onChange:ev=>this.setField({quantity:Math.max(1,parseInt(ev.target.value||'1',10))}),
-            style:{ width:'100%', padding:'13px 15px', borderRadius:'6px', border:'1px solid '+C.line, background:'#fff', fontFamily:this.mono, fontSize:'17px', color:C.ink } })),
+        h('div',{ style:{ marginTop:'24px', maxWidth:'340px' } }, this.qtyField()),
         this.renderMaterialPrice()
       )
     });
@@ -934,7 +944,7 @@ class Component extends DCLogic {
     const h=this.h, C=this.C, e=this.estimate(this.state);
     return h('div',{ style:{ flex:'1', display:'grid', gap:'0', gridTemplateColumns:'minmax(0,1fr) minmax(340px,420px)',
       alignItems:'stretch' }, className:'bs-studio' },
-      h('style',null,'@media (max-width:1024px){.bs-studio{grid-template-columns:1fr !important}.bs-stage{border-right:none !important}}@media (max-width:380px){.bs-refinehead{flex-wrap:wrap;gap:10px}}'),
+      h('style',null,'@media (max-width:1024px){.bs-studio{grid-template-columns:1fr !important;align-items:start !important;align-content:start !important}.bs-stage{border-right:none !important;position:sticky;top:var(--bs-hh,54px);z-index:2;min-height:0 !important;box-shadow:0 12px 22px -18px rgba(0,0,0,.55)}.bs-stagewrap{min-height:0 !important;padding:12px 12px 6px !important}.bs-svg{max-height:40vh !important}.bs-warns{max-height:22vh !important}.bs-rail{-webkit-overflow-scrolling:touch}.bs-fp{transform:scale(.66);top:8px !important;right:8px !important;opacity:.9}}@media (max-width:380px){.bs-refinehead{flex-wrap:wrap;gap:10px}.bs-svg{max-height:34vh !important}.bs-fp{display:none !important}}'),
       this.renderStage(e),
       this.renderRail(e)
     );
@@ -1043,10 +1053,10 @@ class Component extends DCLogic {
       background:lit?'radial-gradient(120% 80% at 50% 22%, #23252C 0%, #16171A 62%, #101115 100%)':C.stagePanel,
       borderRight:'1px solid '+C.stageLine, overflow:'hidden', minHeight:'520px' }, className:'bs-stage' },
       // footprint card
-      h('div',{ style:{ position:'absolute', top:'18px', right:'18px', zIndex:5 } }, this.renderFootprint()),
+      h('div',{ className:'bs-fp', style:{ position:'absolute', top:'18px', right:'18px', zIndex:5, transformOrigin:'top right' } }, this.renderFootprint()),
       // SVG
-      h('div',{ className:'bs-stagewrap', style:{ flex:'1', display:'grid', placeItems:'center', padding:'34px 18px 18px', minHeight:0 } },
-        h('svg',{ ref:el=>this._svg=el, viewBox:'0 0 '+g.viewW+' '+g.viewH, preserveAspectRatio:'xMidYMid meet', style:{ width:'100%', height:'auto', maxHeight:'min(60vh,580px)', overflow:'visible', touchAction:'none' } },
+      h('div',{ className:'bs-stagewrap', style:{ flex:'0 0 auto', display:'grid', placeItems:'center', padding:'20px 18px 12px', minHeight:0 } },
+        h('svg',{ ref:el=>this._svg=el, className:'bs-svg', viewBox:'0 0 '+g.viewW+' '+g.viewH, preserveAspectRatio:'xMidYMid meet', style:{ width:'100%', height:'auto', maxHeight:'min(60vh,580px)', overflow:'visible', touchAction:'none' } },
           h('defs',null,
             inner?h('clipPath',{ id:'bsInner' }, h('path',{ d:inner })):null,
             h('linearGradient',{ id:'bsGlass', x1:'0', y1:'0', x2:'1', y2:'0' },
@@ -1084,6 +1094,8 @@ class Component extends DCLogic {
           hHandles.map(hd=>this.handle(hd,'height',g,lit))
         )
       ),
+      // flexible spacer: pushes warnings + dock to the bottom on tall (desktop) stages, collapses on compact/mobile
+      h('div',{ 'aria-hidden':'true', style:{ flex:'1 1 auto', minHeight:0 } }),
       // warnings below the bottle, then the metrics dock
       this.renderStageWarnings(lit),
       this.renderDock(e, lit)
@@ -1216,7 +1228,23 @@ class Component extends DCLogic {
       this.numRow('baseWidth','Base \u00d8',{tag:'drag \u2194'}),
       this.numRow('slug','Base glass thickness',{tag:'drag \u2195'}),
       this.sliderRow('heelRadius','Heel roundness',v=>v.toFixed(2),{ends:['sharp','round']}),
-      this.numRow('punt','Push-up (punt) depth')
+      this.numRow('punt','Push-up (punt) depth'),
+      h('div',{ style:{ height:'22px' } }),
+      head('Order & MOQ'),
+      this.qtyField()
+    );
+  }
+  qtyField() {
+    const h=this.h, C=this.C, e=this.estimate(this.state);
+    const mat=this.MATERIALS.find(m=>m.key===this.state.material)||this.MATERIALS[1];
+    const below=e.order.belowMoq;
+    return h('div',{ style:{ marginBottom:'4px' } },
+      h('div',{ style:{ display:'flex', alignItems:'center', gap:'6px', fontSize:'13.5px', fontWeight:500, color:C.ink, marginBottom:'8px' } }, 'Order quantity', this.helpDot('quantity')),
+      h('input',{ type:'number', value:this.state.quantity, min:1, inputMode:'numeric',
+        onChange:ev=>this.setField({quantity:Math.max(1,parseInt(ev.target.value||'1',10))}),
+        style:{ width:'100%', minHeight:'48px', padding:'13px 15px', borderRadius:'8px', border:'1px solid '+(below?C.redLine:C.line), background:'#fff', fontFamily:this.mono, fontSize:'16px', color:C.ink } }),
+      h('div',{ style:{ marginTop:'7px', fontSize:'12px', lineHeight:1.4, color:below?C.red:C.sub, fontWeight:below?700:400 } },
+        below ? ('! '+this.fmt(this.state.quantity)+' is below '+mat.label+'’s MOQ of '+this.fmt(mat.moq)) : (mat.label+' MOQ: '+this.fmt(mat.moq)+' · you’re good'))
     );
   }
 
@@ -1282,7 +1310,7 @@ class Component extends DCLogic {
           style:{ width:'44px', minHeight:'44px', display:'grid', placeItems:'center', fontSize:'18px', color:C.sub, borderRight:'1px solid '+C.line } }, '\u2212'),
         h('input',{ type:'number', value:Math.round(dispV*100)/100, step:st*uf,
           onChange:ev=>{ const nv=parseFloat(ev.target.value); if(!isNaN(nv)) set(nv); },
-          style:{ flex:'1', minWidth:0, textAlign:'center', border:'none', fontFamily:this.mono, fontSize:'15px', color:C.ink, padding:'10px 4px', fontVariantNumeric:'tabular-nums' } }),
+          style:{ flex:'1', minWidth:0, textAlign:'center', border:'none', fontFamily:this.mono, fontSize:'16px', color:C.ink, padding:'10px 4px', fontVariantNumeric:'tabular-nums' } }),
         h('span',{ style:{ display:'grid', placeItems:'center', padding:'0 10px', fontFamily:this.mono, fontSize:'11px', color:C.faint, borderLeft:'1px solid '+C.line } }, u),
         h('button',{ 'data-press':'1', 'aria-label':'increase', onClick:()=>set(this.toDisp(this.clamp(v+st,r[0],r[1]))),
           style:{ width:'44px', minHeight:'44px', display:'grid', placeItems:'center', fontSize:'18px', color:C.sub, borderLeft:'1px solid '+C.line } }, '+')
