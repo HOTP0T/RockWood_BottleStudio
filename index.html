@@ -194,17 +194,12 @@ class Component extends DCLogic {
     if(!this.state.disp) this.setState({ disp:this.metricsFrom(this.estimate(this.state)) });
     this._mv = (e)=>this.onMove(e);
     this._up = (e)=>this.onUp(e);
-    this._rz = ()=>{ if(this._rzraf) return; this._rzraf=requestAnimationFrame(()=>{ this._rzraf=0; this.syncHH(); this.forceUpdate(); }); };
+    this._rz = ()=>{ if(this._rzraf) return; this._rzraf=requestAnimationFrame(()=>{ this._rzraf=0; this.forceUpdate(); }); };
     window.addEventListener('pointermove', this._mv, { passive:false });
     window.addEventListener('pointerup', this._up);
     window.addEventListener('resize', this._rz);
     this.loadTemplates();
-    requestAnimationFrame(()=>this.syncHH());
-    try { if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>this.syncHH()); } catch(e){}
-  }
-  // Publish the sticky header's height so the mobile studio can stick the bottle just beneath it.
-  syncHH() {
-    try { const hdr=document.querySelector('.bs-header'); if(hdr) document.documentElement.style.setProperty('--bs-hh', Math.round(hdr.offsetHeight)+'px'); } catch(e){}
+    try { const m=(location.hash||'').match(/[#&]s=(\d)/); if(m) this.setState({ idx:this.clamp(+m[1],0,this.FLOW.length-1) }); } catch(e){}
   }
   componentWillUnmount() {
     window.removeEventListener('pointermove', this._mv);
@@ -566,7 +561,7 @@ class Component extends DCLogic {
     return h('header',{ className:'bs-header', style:{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'18px',
       padding:'18px clamp(16px,4vw,34px)', borderBottom:'1px solid '+line, position:'sticky', top:0, zIndex:30,
       background:(dark?C.stageBg:C.paper)+'F2', backdropFilter:'blur(8px)' } },
-      h('style',null,'@media (max-width:720px){.bs-nav-label{display:none}.bs-nav{gap:6px !important}}@media (max-width:600px){.bs-header{padding-top:12px !important;padding-bottom:12px !important}.bs-logo-text{font-size:16px !important}.bs-stepcount{display:none !important}}@media (max-width:430px){.bs-logo-text{display:none !important}}'),
+      h('style',null,'@media (max-width:1024px){.bs-nav-label{display:none}.bs-nav{gap:6px !important;flex-wrap:nowrap !important}}@media (max-width:600px){.bs-header{padding:12px !important;gap:8px !important}.bs-logo-text{font-size:16px !important}.bs-stepcount{display:none !important}.bs-nav{gap:5px !important}.bs-nav>button{padding:6px 9px !important}}@media (max-width:430px){.bs-logo-text{display:none !important}.bs-nav>button{padding:6px 7px !important}}'),
       h('button',{ 'data-press':'1', onClick:()=>this.go(0), style:{ display:'flex', alignItems:'center', gap:'11px', color:ink } },
         h('span',{ style:{ width:'26px', height:'26px', borderRadius:'50%', border:'1.5px solid '+C.A, display:'grid', placeItems:'center' } },
           h('span',{ style:{ width:'9px', height:'13px', borderRadius:'4px 4px 5px 5px', background:C.A, display:'block' } })),
@@ -944,7 +939,7 @@ class Component extends DCLogic {
     const h=this.h, C=this.C, e=this.estimate(this.state);
     return h('div',{ style:{ flex:'1', display:'grid', gap:'0', gridTemplateColumns:'minmax(0,1fr) minmax(340px,420px)',
       alignItems:'stretch' }, className:'bs-studio' },
-      h('style',null,'@media (max-width:1024px){.bs-studio{grid-template-columns:1fr !important;align-items:start !important;align-content:start !important}.bs-stage{border-right:none !important;position:sticky;top:var(--bs-hh,54px);z-index:2;min-height:0 !important;box-shadow:0 12px 22px -18px rgba(0,0,0,.55)}.bs-stagewrap{min-height:0 !important;padding:12px 12px 6px !important}.bs-svg{max-height:40vh !important}.bs-warns{max-height:22vh !important}.bs-rail{-webkit-overflow-scrolling:touch}.bs-fp{transform:scale(.66);top:8px !important;right:8px !important;opacity:.9}}@media (max-width:380px){.bs-refinehead{flex-wrap:wrap;gap:10px}.bs-svg{max-height:34vh !important}.bs-fp{display:none !important}}'),
+      h('style',null,'@media (max-width:1024px){.bs-studio{display:flex !important;flex-direction:column !important}.bs-stage{border-right:none !important;min-height:0 !important;flex:0 0 auto !important}.bs-stagewrap{min-height:0 !important;padding:12px 12px 6px !important}.bs-svg{max-height:40vh !important}.bs-warns{max-height:22vh !important}.bs-rail{-webkit-overflow-scrolling:touch}.bs-fp{transform:scale(.66);top:8px !important;right:8px !important;opacity:.9}}@media (max-width:380px){.bs-refinehead{flex-wrap:wrap;gap:10px}.bs-svg{max-height:34vh !important}.bs-fp{display:none !important}}'),
       this.renderStage(e),
       this.renderRail(e)
     );
