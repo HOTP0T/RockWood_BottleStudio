@@ -5,7 +5,7 @@
     "cap": 750,
     "finish": "bvs-30",
     "closure": "screw-cap",
-    "d": { "mouth": 3.0, "bore": 1.85, "finishHeight": 2.4, "neck": 5.0, "neckWidth": 2.7, "shoulderHeight": 2.4, "shoulderWidth": 7.8, "shoulderRadius": 0.25, "body": 18.5, "bodyDepth": 7.8, "wallThickness": 0.24, "baseWidth": 7.8, "heelRadius": 0.3, "punt": 1.4, "slug": 1.2, "headspace": 0.03 }
+    "d": { "mouth": 3.0, "bore": 1.85, "finishHeight": 2.4, "neck": 5.0, "neckWidth": 2.7, "shoulderHeight": 2.4, "shoulderWidth": 7.8, "shoulderRadius": 0.25, "body": 18.5, "bodyDepth": 7.8, "wallThickness": 0.24, "baseWidth": 7.8, "heelRadius": 0.3, "punt": 1.2, "slug": 1.4, "headspace": 0.03 }
   },
   {
     "key": "boston",

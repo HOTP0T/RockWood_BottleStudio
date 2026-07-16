@@ -121,7 +121,7 @@ class Component extends DCLogic {
 
   PRESETS = [
     { key:'bordeaux', label:'Bordeaux 750', cap:750, finish:'bvs-30', shape:'round', closure:'screw-cap',
-      d:{ mouth:3.0, bore:1.85, finishHeight:2.4, neck:5.0, neckWidth:2.7, shoulderHeight:2.4, shoulderWidth:7.8, shoulderRadius:0.25, body:18.5, bodyDepth:7.8, wallThickness:0.24, baseWidth:7.8, heelRadius:0.3, punt:1.4, slug:1.2, headspace:0.03 } },
+      d:{ mouth:3.0, bore:1.85, finishHeight:2.4, neck:5.0, neckWidth:2.7, shoulderHeight:2.4, shoulderWidth:7.8, shoulderRadius:0.25, body:18.5, bodyDepth:7.8, wallThickness:0.24, baseWidth:7.8, heelRadius:0.3, punt:1.2, slug:1.4, headspace:0.03 } },
     { key:'boston', label:'Boston round 250', cap:250, finish:'24-410', shape:'round', closure:'screw-cap',
       d:{ mouth:2.44, bore:1.78, finishHeight:1.42, neck:2.4, neckWidth:2.2, shoulderHeight:2.2, shoulderWidth:5.6, shoulderRadius:0.7, body:9.5, bodyDepth:5.6, wallThickness:0.2, baseWidth:5.6, heelRadius:0.5, punt:0.3, slug:1.0, headspace:0.05 } },
     { key:'beer', label:'Beer long-neck 330', cap:330, finish:'crown-26', shape:'round', closure:'mouth-ring',
@@ -212,6 +212,8 @@ class Component extends DCLogic {
   loadTemplates() {
     // Per-shape template files live in ./templates/<shape>.json (see templates/README.md).
     // Static hosting can't list a folder, so we fetch the four known shape files by name.
+    // Skip under file:// — fetch is CORS-blocked there (built-in round presets still work); serve over HTTP or use GitHub Pages.
+    if(location.protocol==='file:') return;
     ['round','oval','square','hexagonal'].forEach(shape=>{
       fetch('./templates/'+shape+'.json',{ cache:'no-cache' })
         .then(r=>r.ok?r.json():null)
@@ -939,7 +941,7 @@ class Component extends DCLogic {
     const h=this.h, C=this.C, e=this.estimate(this.state);
     return h('div',{ style:{ flex:'1', display:'grid', gap:'0', gridTemplateColumns:'minmax(0,1fr) minmax(340px,420px)',
       alignItems:'stretch' }, className:'bs-studio' },
-      h('style',null,'@media (max-width:1024px){.bs-studio{display:flex !important;flex-direction:column !important}.bs-stage{border-right:none !important;min-height:0 !important;flex:0 0 auto !important}.bs-stagewrap{min-height:0 !important;padding:12px 12px 6px !important}.bs-svg{max-height:40vh !important}.bs-warns{max-height:22vh !important}.bs-rail{-webkit-overflow-scrolling:touch}.bs-fp{transform:scale(.66);top:8px !important;right:8px !important;opacity:.9}}@media (max-width:380px){.bs-refinehead{flex-wrap:wrap;gap:10px}.bs-svg{max-height:34vh !important}.bs-fp{display:none !important}}'),
+      h('style',null,'@media (min-width:1025px){.bs-studio-on{height:100vh;overflow:hidden}.bs-studio-on main{min-height:0}.bs-studio{height:100%;overflow:hidden;grid-template-rows:minmax(0,1fr) !important}.bs-stage{overflow:hidden;min-height:0 !important}.bs-rail{overflow:hidden;min-height:0}.bs-stagewrap{position:relative;flex:1 1 0 !important;min-height:0 !important}.bs-svg{position:absolute !important;inset:0 !important;width:100% !important;height:100% !important;max-height:none !important}}@media (max-width:1024px){.bs-studio{display:flex !important;flex-direction:column !important}.bs-stage{border-right:none !important;min-height:0 !important;flex:0 0 auto !important}.bs-stagewrap{min-height:0 !important;padding:12px 12px 6px !important}.bs-svg{max-height:40vh !important}.bs-warns{max-height:22vh !important}.bs-rail{-webkit-overflow-scrolling:touch}.bs-fp{transform:scale(.66);top:8px !important;right:8px !important;opacity:.9}}@media (max-width:380px){.bs-refinehead{flex-wrap:wrap;gap:10px}.bs-svg{max-height:34vh !important}.bs-fp{display:none !important}}'),
       this.renderStage(e),
       this.renderRail(e)
     );
@@ -1089,8 +1091,6 @@ class Component extends DCLogic {
           hHandles.map(hd=>this.handle(hd,'height',g,lit))
         )
       ),
-      // flexible spacer: pushes warnings + dock to the bottom on tall (desktop) stages, collapses on compact/mobile
-      h('div',{ 'aria-hidden':'true', style:{ flex:'1 1 auto', minHeight:0 } }),
       // warnings below the bottle, then the metrics dock
       this.renderStageWarnings(lit),
       this.renderDock(e, lit)
@@ -1484,7 +1484,7 @@ class Component extends DCLogic {
     runtime.markFetched(rootName);
     runtime.setRootName(rootName);
     runtime.adoptParsed(rootName, parsed);
-    fetch(location.href).then((res) => res.ok ? res.text() : "").then((t) => {
+    if (location.protocol !== "file:") fetch(location.href).then((res) => res.ok ? res.text() : "").then((t) => {
       const raw = t ? parseDcText(t) : null;
       if (raw?.template) runtime.updateHtml(rootName, raw.template);
     }).catch(() => {
