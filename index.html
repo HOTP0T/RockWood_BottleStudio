@@ -883,35 +883,116 @@ class Component extends DCLogic {
       +'• Est. price/bottle: '+this.money(e.costUSD)+'\n• Order total: '+this.money(e.order.totalOrder)+'\n\n'
       +'My contact: '+(s.contact.email||'')+' '+(s.contact.phone||'')+'\n\n(Estimate ±10%. Quote PDF generated from the configurator.)';
   }
+  // Build the bottle as a self-contained SVG string (technical drawing with dimension callouts) for the quote PDF.
+  bottleSvgString() {
+    const g=this.buildProfile(), e=this.estimate(this.state), d=this.state.dimensions;
+    const outer=this.pathFrom(g.pts,g.cx,g.yBase);
+    const inner=this.innerPath(g.pts,g.cx,g.tPx,g.yBase);
+    const fillTop=this.fillLevelY(g,e);
+    const mm=(cm)=>this.fmt(cm*10,0);
+    const padR=200, cid='qclip';
+    const wLbl=(r,y,txt)=>{ const x=g.cx+r; return '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="3.5" fill="#A9762E"/>'
+      +'<line x1="'+x.toFixed(1)+'" y1="'+y.toFixed(1)+'" x2="'+(x+18).toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="#C9C2B4" stroke-width="1"/>'
+      +'<text x="'+(x+24).toFixed(1)+'" y="'+(y+6).toFixed(1)+'" font-size="17" font-family="ui-monospace,monospace" fill="#211E19">'+txt+'</text>'; };
+    const bx=g.cx-g.rS-42, ym=(g.top+g.yBase)/2;
+    const bracket='<line x1="'+bx.toFixed(1)+'" y1="'+g.top.toFixed(1)+'" x2="'+bx.toFixed(1)+'" y2="'+g.yBase.toFixed(1)+'" stroke="#8A8375" stroke-width="1"/>'
+      +'<line x1="'+(bx-5).toFixed(1)+'" y1="'+g.top.toFixed(1)+'" x2="'+(bx+5).toFixed(1)+'" y2="'+g.top.toFixed(1)+'" stroke="#8A8375" stroke-width="1"/>'
+      +'<line x1="'+(bx-5).toFixed(1)+'" y1="'+g.yBase.toFixed(1)+'" x2="'+(bx+5).toFixed(1)+'" y2="'+g.yBase.toFixed(1)+'" stroke="#8A8375" stroke-width="1"/>'
+      +'<text x="'+(bx-9).toFixed(1)+'" y="'+ym.toFixed(1)+'" font-size="16" font-family="ui-monospace,monospace" fill="#736B5E" text-anchor="middle" transform="rotate(-90 '+(bx-9).toFixed(1)+' '+ym.toFixed(1)+')">'+mm(e.overallHeightCm)+' mm overall</text>';
+    const fl=inner?'<line x1="'+(g.cx-g.rS-18).toFixed(1)+'" y1="'+fillTop.toFixed(1)+'" x2="'+(g.cx+g.rS+18).toFixed(1)+'" y2="'+fillTop.toFixed(1)+'" stroke="#A9762E" stroke-width="1.2" stroke-dasharray="5 3"/>':'';
+    return '<svg viewBox="-12 -4 '+(g.viewW+padR)+' '+(g.viewH+8)+'" width="100%" style="display:block;max-height:370px" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">'
+      +'<defs>'
+      +(inner?'<clipPath id="'+cid+'"><path d="'+inner+'"/></clipPath>':'')
+      +'<linearGradient id="qg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#D4CEC1"/><stop offset="0.45" stop-color="#EFEAE0"/><stop offset="0.6" stop-color="#F7F3EB"/><stop offset="1" stop-color="#CAC3B5"/></linearGradient>'
+      +'<linearGradient id="ql" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A9762E" stop-opacity="0.4"/><stop offset="1" stop-color="#A9762E" stop-opacity="0.7"/></linearGradient>'
+      +'</defs>'
+      +'<ellipse cx="'+g.cx.toFixed(1)+'" cy="'+(g.yBase+15).toFixed(1)+'" rx="'+(g.rB*1.05).toFixed(1)+'" ry="9" fill="#000" opacity="0.08"/>'
+      +'<path d="'+outer+'" fill="url(#qg)" stroke="#9A9183" stroke-width="1.4" stroke-linejoin="round"/>'
+      +(inner?'<g clip-path="url(#'+cid+')"><rect x="'+(g.cx-g.rS-20).toFixed(1)+'" y="'+fillTop.toFixed(1)+'" width="'+((g.rS+20)*2).toFixed(1)+'" height="'+(g.yBase-fillTop+6).toFixed(1)+'" fill="url(#ql)"/></g>':'')
+      +(inner?'<path d="'+inner+'" fill="none" stroke="#A79F90" stroke-width="0.8" stroke-dasharray="3 3" stroke-opacity="0.55"/>':'')
+      +'<line x1="'+g.cx.toFixed(1)+'" y1="'+(g.top-4).toFixed(1)+'" x2="'+g.cx.toFixed(1)+'" y2="'+g.yBase.toFixed(1)+'" stroke="#BBB4A5" stroke-width="0.7" stroke-dasharray="2 5"/>'
+      +bracket+fl
+      +wLbl(g.rM,g.yMouthMid,mm(d.mouth)+' Ø thread')
+      +wLbl(g.rN,g.yNeckMid,mm(d.neckWidth)+' Ø neck')
+      +wLbl(g.rS,g.yShoulderBot,mm(d.shoulderWidth)+' Ø body')
+      +wLbl(g.rB,g.yBodyBot,mm(d.baseWidth)+' Ø base')
+      +'</svg>';
+  }
   printQuote() {
     if(!this.emailOk()){ this.flash('Enter a valid email first'); return; }
-    const s=this.state, e=this.estimate(s);
-    const mat=(this.MATERIALS.find(m=>m.key===s.material)||{}).label||s.material;
-    const clo=(this.CLOSURES.find(x=>x.key===s.closure)||{}).label||s.closure;
+    const s=this.state, e=this.estimate(s), d=s.dimensions;
+    const mat=this.MATERIALS.find(m=>m.key===s.material)||this.MATERIALS[1];
+    const fin=this.FINISHES.find(f=>f.key===s.finish)||this.FINISHES[0];
+    const clo=this.CLOSURES.find(c=>c.key===s.closure)||{label:s.closure,desc:''};
+    const ft=this.FILLTYPES.find(f=>f.key===s.fillType)||{label:s.fillType,hs:d.headspace};
+    const proc=this.PROCESS[s.process]||this.PROCESS.bb;
+    const esc=(x)=>String(x==null?'':x).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+    const mm=(cm)=>this.fmt(cm*10,(cm*10<20?1:0))+' mm';
+    const cap=v=>(v||'').charAt(0).toUpperCase()+(v||'').slice(1);
     const warns=this.feasibility(s);
-    const esc=(x)=>String(x).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
-    const tbl=(cls,rows)=>'<table class="'+cls+'">'+rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td></tr>').join('')+'</table>';
-    const specRows=[['Closure',clo],['Shape',s.shape],['Material',mat],['Target capacity',s.capacity+' ml'],['Order quantity',this.fmt(s.quantity)]];
-    const priceRows=[['Glass weight',this.fmt(e.weightG)+' g'],['Per bottle',this.money(e.costUSD)],['All-in / bottle',this.money(e.order.unitAllIn)],['Order total',this.money(e.order.totalOrder)]];
-    const warnHtml=warns.length?'<div class="q-warn"><div class="q-warn-h">'+warns.length+' warning'+(warns.length>1?'s':'')+' — review before production</div>'+warns.map(w=>'<div>'+(w.level==='error'?'✕':'!')+' '+esc(w.msg)+'</div>').join('')+'</div>':'';
-    const css='@media screen{#bs-print-quote{display:none}}@media print{body>*{display:none !important}#bs-print-quote{display:block !important;position:absolute;inset:0}}'
-      +'#bs-print-quote{font-family:Georgia,serif;color:#211E19;padding:14px 8px;max-width:720px;margin:0 auto}'
-      +'#bs-print-quote h1{font-size:26px;margin:0 0 2px}#bs-print-quote .q-sub{color:#736B5E;font-size:13px;margin-bottom:18px}'
-      +'#bs-print-quote h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#A9762E;margin:22px 0 6px}'
-      +'#bs-print-quote table{width:100%;border-collapse:collapse;font-size:13px}'
-      +'#bs-print-quote td{padding:7px 2px;border-bottom:1px solid #E4DDD1}#bs-print-quote td:last-child{text-align:right;font-family:ui-monospace,monospace}'
-      +'#bs-print-quote .q-meta td{border:none;color:#736B5E}'
-      +'#bs-print-quote .q-disc{margin-top:16px;padding:10px 12px;border:1.5px solid #CC2E22;color:#CC2E22;border-radius:6px;font-family:sans-serif;font-size:12.5px;font-weight:700}'
-      +'#bs-print-quote .q-warn{margin-top:14px;padding:10px 12px;background:#CC2E22;color:#fff;border-radius:6px;font-family:sans-serif;font-size:12px}'
-      +'#bs-print-quote .q-warn-h{font-weight:800;margin-bottom:5px}';
-    const now=new Date().toLocaleString();
+    const now=new Date(), pad=n=>('0'+n).slice(-2);
+    const dateStr=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+    const qref='Q-'+now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate())+'-'+String(Math.floor(now.getTime()/60000)%100000);
+    const tbl=(rows)=>'<table>'+rows.filter(Boolean).map(r=>'<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td></tr>').join('')+'</table>';
+    const specRows=[['Shape',cap(s.shape)],['Closure',clo.label],['Finish',fin.name+' ('+fin.style+' · '+fin.std+')'],['Material',mat.label],['Fill type',ft.label],['Target capacity',this.fmt(s.capacity)+' ml'],['Order quantity',this.fmt(s.quantity)+' bottles']];
+    const dimA=[['Overall height',mm(e.overallHeightCm)],['Body Ø (shoulder)',mm(d.shoulderWidth)],['Base Ø',mm(d.baseWidth)],['Body height',mm(d.body)],['Shoulder height',mm(d.shoulderHeight)],s.shape==='oval'?['Body depth',mm(d.bodyDepth)]:null,['Neck Ø',mm(d.neckWidth)],['Neck height',mm(d.neck)]];
+    const dimB=[['Thread Ø (T)',mm(d.mouth)],['Bore / throat Ø (I)',mm(d.bore)],['Finish height (H)',mm(d.finishHeight)],['Wall thickness',mm(d.wallThickness)],['Base glass thickness',mm(d.slug)],['Push-up (punt) depth',mm(d.punt)],['Heel radius',mm(d.heelRadius)]];
+    const engA=[['Glass weight',this.fmt(e.weightG)+' g'],['Lightweighting',e.ratio.toFixed(3)+' g/ml'],['Fill capacity',this.fmt(e.fillMl)+' ml'],['Brimful capacity',this.fmt(e.brimfulMl)+' ml'],['Headspace (ullage)',Math.round(d.headspace*100)+' %'],['Forming process',proc.label]];
+    const engB=[['Min wall',this.fmt(e.minWallMm,2)+' mm'],['Wrap-label area',this.fmt(e.wrapLabelCm2)+' cm²'],['Tolerance — height','± '+e.tol.heightMm.toFixed(2)+' mm'],['Tolerance — Ø','± '+e.tol.diaMm.toFixed(2)+' mm'],['Tolerance — capacity','± '+e.tol.capPct+' %']];
+    const priceRows=[['Glass unit cost',this.money(e.order.unitCost)],['Tooling (total)',this.money(e.order.tooling)],['Tooling / unit',this.money(e.order.toolingPerUnit)],['All-in / bottle',this.money(e.order.unitAllIn)],['Order quantity',this.fmt(s.quantity)+' bottles'],['Material MOQ',this.fmt(mat.moq)+(e.order.belowMoq?'  — BELOW MOQ':'  — met')]];
+    const matRows=[['Material',mat.label],['Light protection',mat.protect],['Finish standard',fin.name+' · '+fin.std],['Closure',clo.label+(clo.desc?' — '+clo.desc:'')],['Fill type',ft.label]];
+    const warnHtml=warns.length?'<div class="q-warn"><div class="q-warn-h">'+warns.length+' item'+(warns.length>1?'s':'')+' to review before production</div>'+warns.map(w=>'<div>'+(w.level==='error'?'✕':'!')+' '+esc(w.msg)+'</div>').join('')+'</div>':'';
+    const svg=this.bottleSvgString();
+    const css='@media screen{#bs-print-quote{display:none}}@media print{body>*{display:none !important}#bs-print-quote{display:block !important;position:absolute;inset:0}@page{margin:13mm 12mm}}'
+      +'#bs-print-quote{font-family:\'Hanken Grotesk\',Arial,sans-serif;color:#211E19;max-width:770px;margin:0 auto;padding:0 4px;font-size:12px;line-height:1.45}'
+      +'#bs-print-quote .q-top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #211E19;padding-bottom:10px;margin-bottom:12px}'
+      +'#bs-print-quote .q-co{font-family:Georgia,serif;font-size:20px;font-weight:600}'
+      +'#bs-print-quote .q-co-sub{color:#736B5E;font-size:10px;margin-top:3px;line-height:1.5}'
+      +'#bs-print-quote .q-ref{text-align:right;font-size:11px;color:#5b5346}'
+      +'#bs-print-quote .q-ref-t{font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#A9762E;font-size:10px;margin-bottom:2px}'
+      +'#bs-print-quote h1{font-family:Georgia,serif;font-size:22px;font-weight:400;margin:0 0 6px}'
+      +'#bs-print-quote h2{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:#A9762E;margin:16px 0 5px;border-bottom:1px solid #E4DDD1;padding-bottom:3px;break-after:avoid}'
+      +'#bs-print-quote .q-meta{width:100%;border-collapse:collapse;margin-bottom:4px}'
+      +'#bs-print-quote .q-meta td{color:#736B5E;font-size:11px;padding:1px 0;border:none}'
+      +'#bs-print-quote .q-meta td:first-child{width:110px;text-transform:uppercase;letter-spacing:.06em;font-size:10px}'
+      +'#bs-print-quote .q-meta td:last-child{color:#211E19;font-weight:600;text-align:left;font-family:inherit}'
+      +'#bs-print-quote .q-hero{display:flex;gap:16px;align-items:stretch;margin:12px 0 4px;break-inside:avoid}'
+      +'#bs-print-quote .q-draw{flex:1 1 54%;background:#FAF8F3;border:1px solid #E4DDD1;border-radius:8px;padding:8px;display:flex;align-items:center;justify-content:center}'
+      +'#bs-print-quote .q-figs{flex:1 1 46%;display:grid;grid-template-columns:1fr 1fr;gap:8px;align-content:center}'
+      +'#bs-print-quote .q-fig{border:1px solid #E4DDD1;border-radius:6px;padding:9px 11px;background:#fff}'
+      +'#bs-print-quote .q-fig span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#736B5E}'
+      +'#bs-print-quote .q-fig b{display:block;font-family:ui-monospace,monospace;font-size:18px;margin-top:2px;font-weight:700}'
+      +'#bs-print-quote .q-fig em{display:block;font-style:normal;font-size:9px;color:#9A9183;margin-top:1px;font-family:ui-monospace,monospace}'
+      +'#bs-print-quote .q-fig-hi{background:#A9762E;border-color:#A9762E;color:#fff}'
+      +'#bs-print-quote .q-fig-hi span,#bs-print-quote .q-fig-hi em{color:#F4EAD9}'
+      +'#bs-print-quote table{width:100%;border-collapse:collapse;font-size:11.5px}'
+      +'#bs-print-quote td{padding:4.5px 2px;border-bottom:1px solid #EEE9DF}'
+      +'#bs-print-quote td:first-child{color:#5b5346}'
+      +'#bs-print-quote td:last-child{text-align:right;font-family:ui-monospace,monospace;color:#211E19}'
+      +'#bs-print-quote .q-2col{display:flex;gap:26px}#bs-print-quote .q-2col>div{flex:1}'
+      +'#bs-print-quote .q-disc{margin-top:13px;padding:9px 12px;border:1.5px solid #CC2E22;color:#CC2E22;border-radius:6px;font-size:11px;font-weight:600;break-inside:avoid}'
+      +'#bs-print-quote .q-warn{margin-top:10px;padding:9px 12px;background:#CC2E22;color:#fff;border-radius:6px;font-size:11px;break-inside:avoid}'
+      +'#bs-print-quote .q-warn-h{font-weight:800;margin-bottom:4px}#bs-print-quote .q-warn div{margin:2px 0}'
+      +'#bs-print-quote .q-foot{margin-top:16px;padding-top:8px;border-top:1px solid #E4DDD1;color:#9A9183;font-size:9.5px;text-align:center}';
     const html='<style>'+css+'</style>'
-      +'<h1>Rockwood Bottle Studio</h1><div class="q-sub">Custom bottle estimate · '+esc(now)+'</div>'
-      +'<table class="q-meta"><tr><td>Contact</td><td>'+esc(s.contact.email||'-')+'</td></tr><tr><td>Phone</td><td>'+esc(s.contact.phone||'-')+'</td></tr></table>'
-      +'<h2>Bottle specification</h2>'+tbl('q-spec',specRows)
-      +'<h2>Estimate</h2>'+tbl('q-price',priceRows)
-      +'<div class="q-disc">WARNING — this is an estimate, ±10%. Placeholder pricing: naked bottle, excludes cap, label &amp; decoration.</div>'
-      +warnHtml;
+      +'<div class="q-top"><div><div class="q-co">Rockwood Bottle Studio</div><div class="q-co-sub">[Company address line 1] · [City, Country]<br>[+00 000 000 000] · [sales@rockwood…]</div></div>'
+      +'<div class="q-ref"><div class="q-ref-t">Quotation</div><div>'+esc(qref)+'</div><div>'+esc(dateStr)+'</div><div>Valid 30 days</div></div></div>'
+      +'<h1>Custom bottle estimate</h1>'
+      +'<table class="q-meta"><tr><td>Prepared for</td><td>'+esc(s.contact.email||'—')+(s.contact.phone?'  ·  '+esc(s.contact.phone):'')+'</td></tr></table>'
+      +'<div class="q-hero"><div class="q-draw">'+svg+'</div><div class="q-figs">'
+      +'<div class="q-fig q-fig-hi"><span>Est. price / bottle</span><b>'+this.money(e.costUSD)+'</b><em>placeholder · ±10%</em></div>'
+      +'<div class="q-fig"><span>Order total</span><b>'+this.money(e.order.totalOrder)+'</b><em>'+this.fmt(s.quantity)+' units</em></div>'
+      +'<div class="q-fig"><span>Capacity</span><b>'+this.fmt(s.capacity)+' ml</b><em>'+cap(s.shape)+' · '+esc(mat.label)+'</em></div>'
+      +'<div class="q-fig"><span>Glass weight</span><b>'+this.fmt(e.weightG)+' g</b><em>'+e.ratio.toFixed(3)+' g/ml</em></div>'
+      +'</div></div>'
+      +'<h2>Specification</h2>'+tbl(specRows)
+      +'<h2>Dimensions</h2><div class="q-2col"><div>'+tbl(dimA)+'</div><div>'+tbl(dimB)+'</div></div>'
+      +'<h2>Engineering &amp; tolerances</h2><div class="q-2col"><div>'+tbl(engA)+'</div><div>'+tbl(engB)+'</div></div>'
+      +'<h2>Material &amp; finish</h2>'+tbl(matRows)
+      +'<h2>Pricing breakdown</h2>'+tbl(priceRows)
+      +'<div class="q-disc">This is an ESTIMATE, ±10%. Placeholder pricing — naked bottle, excludes cap, label &amp; decoration. Final pricing confirmed by Rockwood engineering after review.</div>'
+      +warnHtml
+      +'<div class="q-foot">Rockwood Bottle Studio · [www.rockwood…] · Generated '+esc(now.toLocaleString())+' · Quote '+esc(qref)+'</div>';
     let host=document.getElementById('bs-print-quote');
     if(!host){ host=document.createElement('div'); host.id='bs-print-quote'; document.body.appendChild(host); }
     host.innerHTML=html;
