@@ -199,6 +199,7 @@ class Component extends DCLogic {
     window.addEventListener('pointerup', this._up);
     window.addEventListener('resize', this._rz);
     this.loadTemplates();
+    this.startDemo();
     try { const m=(location.hash||'').match(/[#&]s=(\d)/); if(m) this.setState({ idx:this.clamp(+m[1],0,this.FLOW.length-1) }); } catch(e){}
   }
   componentWillUnmount() {
@@ -208,6 +209,7 @@ class Component extends DCLogic {
     cancelAnimationFrame(this._raf);
     cancelAnimationFrame(this._mraf);
     cancelAnimationFrame(this._rzraf);
+    cancelAnimationFrame(this._demoRaf);
   }
   loadTemplates() {
     // Per-shape template files live in ./templates/<shape>.json (see templates/README.md).
@@ -647,50 +649,129 @@ class Component extends DCLogic {
   screenContact() {
     const h=this.h, C=this.C;
     const mail='mailto:sales@rockwoodbottle.com?subject=Custom%20bottle%20enquiry';
-    return h('div',{ className:'bs-landing', style:{ flex:'1', display:'grid', gridTemplateColumns:'minmax(0,1.05fr) minmax(0,1fr)', alignItems:'stretch', minHeight:0 } },
-      h('style',null,'@media (max-width:900px){.bs-landing{grid-template-columns:1fr !important}.bs-landing-copy{order:2 !important;padding:clamp(24px,5vw,40px) !important}.bs-teaser{order:1 !important;min-height:44vh}}'),
-      h('div',{ className:'bs-landing-copy', style:{ display:'flex', flexDirection:'column', justifyContent:'center', padding:'clamp(28px,6vh,72px) clamp(20px,5vw,64px)' } },
-        h('div',{ style:{ maxWidth:'620px' } },
+    const ink='#F5F0E7', sub='#C4BFB5', faint='rgba(245,240,231,.5)';
+    return h('div',{ className:'bs-hero', style:{ position:'relative', flex:'1', minHeight:0, overflow:'hidden',
+        background:'radial-gradient(130% 95% at 74% 32%, #24262E 0%, #17181C 56%, #0D0E11 100%)' } },
+      h('style',null,'@keyframes bsBlink{0%,100%{opacity:.3}50%{opacity:1}}@media (max-width:900px){.bs-hero-bottle{width:100% !important;opacity:.95;align-items:flex-start !important;padding-top:6vh}.bs-hero-bottle svg{height:clamp(240px,46vh,430px) !important}.bs-hero-chips{display:none !important}.bs-hero-tag{left:50% !important;right:auto !important;transform:translateX(-50%)}.bs-hero-price{left:50% !important;right:auto !important;transform:translateX(-50%) !important;bottom:clamp(16px,4vw,24px) !important;text-align:center}.bs-hero-price>div:nth-child(2){justify-content:center}.bs-hero-scrim{background:linear-gradient(180deg,rgba(13,14,17,.1) 0%,rgba(13,14,17,.28) 38%,rgba(13,14,17,.88) 70%,rgba(13,14,17,.97) 100%) !important}.bs-hero-copy{max-width:none !important;justify-content:flex-end !important;padding-bottom:104px !important}}'),
+      this.renderHeroStage(),
+      h('div',{ 'aria-hidden':'true', className:'bs-hero-scrim', style:{ position:'absolute', inset:0, zIndex:2, pointerEvents:'none',
+        background:'linear-gradient(90deg, rgba(13,14,17,.94) 0%, rgba(13,14,17,.85) 30%, rgba(13,14,17,.4) 54%, rgba(13,14,17,0) 72%)' } }),
+      h('div',{ className:'bs-hero-copy', style:{ position:'relative', zIndex:3, height:'100%', display:'flex', flexDirection:'column',
+          justifyContent:'center', padding:'clamp(28px,6vh,72px) clamp(20px,5vw,72px)', maxWidth:'640px', pointerEvents:'none' } },
+        h('div',{ style:{ maxWidth:'560px', pointerEvents:'auto' } },
           h('div',{ style:{ fontFamily:this.mono, fontSize:'12px', letterSpacing:'.16em', textTransform:'uppercase', color:C.A, marginBottom:'16px' } }, 'Rockwood Bottle Studio'),
-          h('h1',{ style:{ fontFamily:this.serif, fontSize:'clamp(30px,4.4vw,50px)', lineHeight:1.05, fontWeight:400, margin:'0 0 18px', color:C.ink, letterSpacing:'-.01em', textWrap:'pretty' } }, 'Welcome to the Rockwood Bottle Configurator'),
-          h('p',{ style:{ fontSize:'17px', color:C.sub, margin:'0 0 16px', lineHeight:1.55, maxWidth:'54ch' } }, 'Create a custom glass bottle in minutes, then let our engineers transform your concept into a fully manufacturable design.'),
-          h('p',{ style:{ fontSize:'15px', color:C.sub, margin:'0 0 32px', lineHeight:1.55, maxWidth:'54ch' } }, 'Start with a few simple choices. Next, refine your bottle using our live design tool. Once you\u2019re happy, we\u2019ll hand your concept to our packaging engineers.'),
+          h('h1',{ style:{ fontFamily:this.serif, fontSize:'clamp(32px,4.6vw,54px)', lineHeight:1.04, fontWeight:400, margin:'0 0 18px', color:ink, letterSpacing:'-.01em', textWrap:'pretty' } }, 'Design your bottle. Watch it come to life.'),
+          h('p',{ style:{ fontSize:'17px', color:sub, margin:'0 0 16px', lineHeight:1.55, maxWidth:'50ch' } }, 'The bottle beside you is being shaped in real time \u2014 dimensions, capacity and a live price, all from the same tool you\u2019re about to use.'),
+          h('p',{ style:{ fontSize:'15px', color:sub, margin:'0 0 32px', lineHeight:1.55, maxWidth:'50ch', opacity:.85 } }, 'Make a few simple choices, then refine every curve yourself. When it\u2019s right, we hand your concept to our packaging engineers.'),
           h('div',{ style:{ display:'flex', flexWrap:'wrap', gap:'14px', alignItems:'center' } },
             h('button',{ 'data-press':'1', onClick:()=>this.go(this.state.idx+1),
-              style:{ padding:'15px 30px', borderRadius:'999px', border:'none', background:C.ink, color:'#fff', fontSize:'15.5px', fontWeight:600, cursor:'pointer', boxShadow:'0 10px 26px -12px rgba(33,30,25,.7)' } }, 'Start designing  \u2192'),
-            h('a',{ href:mail, style:{ padding:'15px 26px', borderRadius:'999px', border:'1px solid '+C.line, background:'transparent', color:C.ink, fontSize:'15px', fontWeight:600, textDecoration:'none' } }, 'Or send us an email')
+              style:{ padding:'15px 30px', borderRadius:'999px', border:'none', background:C.A, color:'#fff', fontSize:'15.5px', fontWeight:600, cursor:'pointer', boxShadow:'0 12px 30px -12px rgba(169,118,46,.75)' } }, 'Start designing  \u2192'),
+            h('a',{ href:mail, style:{ padding:'14px 24px', borderRadius:'999px', border:'1px solid rgba(245,240,231,.26)', background:'transparent', color:'#EDE7DC', fontSize:'14px', fontWeight:500, textDecoration:'none' } }, 'Or send us an email')
           ),
-          h('div',{ style:{ marginTop:'18px', fontSize:'12.5px', color:C.faint } }, 'No sign-up needed \u2014 we\u2019ll ask for your email only when you request the estimate.')
+          h('div',{ style:{ marginTop:'18px', fontSize:'12.5px', color:faint } }, 'No sign-up needed \u2014 we\u2019ll ask for your email only when you request the estimate.')
         )
-      ),
-      this.renderTeaser()
+      )
     );
   }
-  renderTeaser() {
-    const h=this.h, C=this.C, g=this.buildProfile(), e=this.estimate(this.state), disp=this.dispNow();
+  // ---- Welcome hero: the studio auto-designing a bottle in the background ----
+  _demoSeqBuild() {
+    return this.PRESETS.map(p=>({ dims:{ ...this.baseDims(), ...(p.d||{}) }, cap:p.cap, shape:p.shape, label:p.label }));
+  }
+  startDemo() {
+    if(this._demoRaf) return;
+    this._demoSeq=this._demoSeqBuild();
+    const loop=(now)=>{ this._demoRaf=requestAnimationFrame(loop); this.demoTick(now); };
+    this._demoRaf=requestAnimationFrame(loop);
+  }
+  initDemo(now) {
+    const S=this._demoSeq;
+    return { i:1, from:S[0].dims, to:S[1].dims, dims:{ ...S[0].dims },
+      shapeFrom:S[0].shape, shapeTo:S[1].shape, capFrom:S[0].cap, capTo:S[1].cap,
+      phase:'morph', phaseStart:now, mix:0 };
+  }
+  lerpDims(a,b,t) { const o={}; for(const k in a){ const av=a[k], bv=b[k]; o[k]=(typeof av==='number'&&typeof bv==='number')?av+(bv-av)*t:bv; } return o; }
+  demoTick(now) {
+    if(this.FLOW[this.state.idx]!=='contact'){ this._demo=null; return; }
+    if(!this._demoSeq) this._demoSeq=this._demoSeqBuild();
+    if(this.reduced()){ if(!this._demo){ this._demo=this.initDemo(now); this._demo.dims={ ...this._demoSeq[0].dims }; this._demo.mix=0; this.forceUpdate(); } return; }
+    if(!this._demo) this._demo=this.initDemo(now);
+    const D=this._demo, S=this._demoSeq, MORPH=2600, HOLD=1100, el=now-D.phaseStart;
+    if(D.phase==='morph'){
+      const k=Math.min(1, el/MORPH), ee=1-Math.pow(1-k,3);
+      D.mix=ee; D.dims=this.lerpDims(D.from, D.to, ee);
+      if(k>=1){ D.phase='hold'; D.phaseStart=now; D.mix=1; D.dims=D.to; }
+    } else if(el>=HOLD){
+      const ni=(D.i+1)%S.length;
+      D.from=D.to; D.to=S[ni].dims; D.shapeFrom=D.shapeTo; D.shapeTo=S[ni].shape;
+      D.capFrom=D.capTo; D.capTo=S[ni].cap; D.i=ni; D.phase='morph'; D.phaseStart=now; D.mix=0;
+    }
+    this._pxs=(this._pxs||0)+((this._px||0)-(this._pxs||0))*0.09;
+    this._pys=(this._pys||0)+((this._py||0)-(this._pys||0))*0.09;
+    if(!this._lastFU || now-this._lastFU>30){ this._lastFU=now; this.forceUpdate(); }
+  }
+  onHeroMove(e) { const r=e.currentTarget.getBoundingClientRect(); this._px=((e.clientX-r.left)/r.width-0.5)*2; this._py=((e.clientY-r.top)/r.height-0.5)*2; }
+  onHeroLeave() { this._px=0; this._py=0; }
+  heroChip(label, val, unit) {
+    const h=this.h, C=this.C;
+    return h('div',{ style:{ background:'rgba(16,17,21,.55)', border:'1px solid '+C.stageLine, borderRadius:'10px', padding:'9px 13px', backdropFilter:'blur(6px)', minWidth:'116px' } },
+      h('div',{ style:{ fontSize:'9.5px', fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase', color:C.stageSub } }, label),
+      h('div',{ style:{ fontFamily:this.mono, fontSize:'16px', fontWeight:700, color:C.stageInk, marginTop:'2px' } },
+        val+' ', h('span',{ style:{ fontSize:'10px', color:C.stageSub, fontWeight:500 } }, unit)));
+  }
+  renderHeroStage() {
+    const h=this.h, C=this.C, reduced=this.reduced();
+    const seq=this._demoSeq||(this._demoSeq=this._demoSeqBuild());
+    const D=this._demo, mix=D?D.mix:0;
+    const dims=(D&&D.dims)||seq[0].dims;
+    const shape=D?(mix<0.5?D.shapeFrom:D.shapeTo):seq[0].shape;
+    const cap=D?Math.round(D.capFrom+(D.capTo-D.capFrom)*mix):seq[0].cap;
+    const g=this.buildProfile(dims, 0);
+    const est=this.estimate({ ...this.state, dimensions:dims, shape, wall:0 });
     const outer=this.pathFrom(g.pts,g.cx,g.yBase), inner=this.innerPath(g.pts,g.cx,g.tPx,g.yBase);
-    const fillTop=this.fillLevelY(g,e);
-    return h('div',{ className:'bs-teaser', style:{ position:'relative', display:'grid', placeItems:'center', overflow:'hidden',
-        background:'radial-gradient(120% 80% at 50% 20%, #23252C 0%, #16171A 62%, #101115 100%)', borderLeft:'1px solid '+C.stageLine } },
-      h('svg',{ viewBox:'0 0 '+g.viewW+' '+g.viewH, style:{ width:'auto', height:'clamp(280px,68vh,600px)', maxWidth:'78%', overflow:'visible' } },
-        h('defs',null,
-          inner?h('clipPath',{ id:'bsTInner' }, h('path',{ d:inner })):null,
-          h('linearGradient',{ id:'bsTGlass', x1:'0', y1:'0', x2:'1', y2:'0' },
-            h('stop',{ offset:'0', stopColor:'#3A3D45' }), h('stop',{ offset:'.5', stopColor:'#6A6E78' }), h('stop',{ offset:'1', stopColor:'#2C2F36' })),
-          h('linearGradient',{ id:'bsTLiq', x1:'0', y1:'0', x2:'0', y2:'1' },
-            h('stop',{ offset:'0', stopColor:C.A, stopOpacity:.5 }), h('stop',{ offset:'1', stopColor:C.A, stopOpacity:.78 }))),
-        h('ellipse',{ cx:g.cx, cy:g.yBase+20, rx:g.rB*1.05, ry:12, fill:'#000', opacity:.5 }),
-        h('path',{ d:outer, fill:'url(#bsTGlass)', stroke:'#0C0D10', strokeWidth:1.4, strokeLinejoin:'round' }),
-        inner?h('g',{ clipPath:'url(#bsTInner)' }, h('rect',{ x:g.cx-g.rS-20, y:fillTop, width:(g.rS+20)*2, height:g.yBase-fillTop+4, fill:'url(#bsTLiq)' })):null,
-        h('line',{ x1:g.cx, y1:g.top-4, x2:g.cx, y2:g.yBase, stroke:'#FFFFFF', strokeWidth:.7, strokeDasharray:'2 5', strokeOpacity:.22 })
+    const fillTop=this.fillLevelY(g,est);
+    const now=(typeof performance!=='undefined')?performance.now():0;
+    const pulse=reduced?0.6:(0.45+0.45*Math.sin(now/650));
+    const px=reduced?0:(this._pxs||0), py=reduced?0:(this._pys||0);
+    const tx=(px*16).toFixed(1), ty=(py*10).toFixed(1);
+    const shapeLabel={ round:'Round', oval:'Oval', square:'Square', hexagonal:'Hexagonal' }[shape]||shape;
+    const dragActive=!!(D&&D.phase==='morph'&&!reduced);
+    const handle=(x,y,r)=>h('g',null,
+      h('circle',{ cx:x, cy:y, r:(r||8)+4*pulse, fill:'none', stroke:C.A, strokeWidth:1.2, opacity:0.22+0.34*pulse }),
+      h('circle',{ cx:x, cy:y, r:4.2, fill:C.A, stroke:'#0C0D10', strokeWidth:1 }));
+    const hy=g.yShoulderBot, by=g.yBodyBot, ny=g.yNeckBot;
+    return h('div',{ className:'bs-hero-stage', onPointerMove:e=>this.onHeroMove(e), onPointerLeave:()=>this.onHeroLeave(),
+        style:{ position:'absolute', inset:0, zIndex:1 } },
+      h('div',{ className:'bs-hero-bottle', style:{ position:'absolute', top:0, bottom:0, right:0, width:'62%', display:'grid', placeItems:'center' } },
+        h('div',{ style:{ transform:'translate('+tx+'px,'+ty+'px)', willChange:'transform' } },
+          h('svg',{ viewBox:'0 0 '+g.viewW+' '+g.viewH, style:{ width:'auto', height:'clamp(360px,84vh,760px)', maxWidth:'96%', overflow:'visible', display:'block' } },
+            h('defs',null,
+              inner?h('clipPath',{ id:'bsHInner' }, h('path',{ d:inner })):null,
+              h('linearGradient',{ id:'bsHGlass', x1:'0', y1:'0', x2:'1', y2:'0' },
+                h('stop',{ offset:'0', stopColor:'#43474F' }), h('stop',{ offset:'.5', stopColor:'#9096A1' }), h('stop',{ offset:'1', stopColor:'#35393F' })),
+              h('linearGradient',{ id:'bsHLiq', x1:'0', y1:'0', x2:'0', y2:'1' },
+                h('stop',{ offset:'0', stopColor:C.A, stopOpacity:.45 }), h('stop',{ offset:'1', stopColor:C.A, stopOpacity:.8 }))),
+            h('ellipse',{ cx:g.cx, cy:g.yBase+18, rx:g.rB*1.1, ry:12, fill:'#000', opacity:.5 }),
+            h('path',{ d:outer, fill:'url(#bsHGlass)', stroke:'#0B0C0F', strokeWidth:1.4, strokeLinejoin:'round' }),
+            inner?h('g',{ clipPath:'url(#bsHInner)' }, h('rect',{ x:g.cx-g.rS-24, y:fillTop, width:(g.rS+24)*2, height:g.yBase-fillTop+6, fill:'url(#bsHLiq)' })):null,
+            h('line',{ x1:g.cx, y1:g.top-6, x2:g.cx, y2:g.yBase, stroke:'#fff', strokeWidth:.7, strokeDasharray:'2 6', strokeOpacity:.18 }),
+            h('line',{ x1:g.cx-g.rS, y1:hy, x2:g.cx+g.rS, y2:hy, stroke:C.A, strokeWidth:1, strokeOpacity:dragActive?0.5:0.22, strokeDasharray:'3 4' }),
+            handle(g.cx+g.rS,hy), handle(g.cx-g.rS,hy), handle(g.cx+g.rB,by), handle(g.cx+g.rN,ny)
+          )
+        )
       ),
-      h('div',{ className:'bs-teaser-price', style:{ position:'absolute', left:'clamp(16px,3vw,28px)', bottom:'clamp(16px,3vw,28px)',
-          background:'rgba(16,17,21,.72)', backdropFilter:'blur(6px)', border:'1px solid '+C.stageLine, borderRadius:'12px', padding:'12px 16px', color:'#fff' } },
-        h('div',{ style:{ fontSize:'10px', fontWeight:700, letterSpacing:'.12em', textTransform:'uppercase', color:C.A } }, 'Live estimate'),
-        h('div',{ style:{ display:'flex', alignItems:'baseline', gap:'8px', marginTop:'4px' } },
-          h('span',{ style:{ fontFamily:this.mono, fontSize:'26px', fontWeight:700 } }, this.money(disp.priceUSD)),
-          h('span',{ style:{ fontSize:'11px', color:C.stageSub } }, 'per bottle')),
-        h('div',{ style:{ fontSize:'11px', color:C.stageSub, marginTop:'2px', fontFamily:this.mono } }, this.fmt(this.state.capacity)+' ml \u00b7 '+this.state.shape+' \u00b7 est. \u00b110%'))
+      h('div',{ className:'bs-hero-chips', style:{ position:'absolute', top:'50%', right:'clamp(16px,3vw,34px)', transform:'translateY(-50%)', display:'flex', flexDirection:'column', gap:'10px' } },
+        this.heroChip('Body \u00d8', this.fmt(dims.shoulderWidth*10,0), 'mm'),
+        this.heroChip('Height', this.fmt(est.overallHeightCm*10,0), 'mm'),
+        this.heroChip('Glass', this.fmt(est.weightG,0), 'g')
+      ),
+      h('div',{ className:'bs-hero-price', style:{ position:'absolute', right:'clamp(16px,3vw,34px)', bottom:'clamp(16px,3vw,30px)',
+          background:'rgba(18,19,24,.82)', backdropFilter:'blur(8px)', border:'1px solid rgba(169,118,46,.55)', borderRadius:'14px', padding:'16px 22px', color:'#fff', minWidth:'210px',
+          boxShadow:'0 18px 44px -18px rgba(0,0,0,.75), 0 0 0 1px rgba(169,118,46,.14)' } },
+        h('div',{ style:{ fontSize:'11px', fontWeight:700, letterSpacing:'.14em', textTransform:'uppercase', color:C.A } }, 'Live estimate'),
+        h('div',{ style:{ display:'flex', alignItems:'baseline', gap:'9px', marginTop:'5px' } },
+          h('span',{ style:{ fontFamily:this.mono, fontSize:'40px', fontWeight:700, lineHeight:1, textShadow:'0 0 22px rgba(169,118,46,.35)' } }, this.money(est.costUSD)),
+          h('span',{ style:{ fontSize:'13px', color:'#D9D4C9' } }, 'per bottle')),
+        h('div',{ style:{ fontSize:'12px', color:C.stageSub, marginTop:'6px', fontFamily:this.mono } }, this.fmt(cap)+' ml \u00b7 '+shapeLabel+' \u00b7 est. \u00b110%'))
     );
   }
 
@@ -1029,8 +1110,8 @@ class Component extends DCLogic {
   }
 
   // ---------- STAGE ----------
-  buildProfile() {
-    const d=this.state.dimensions, S=this.STAGE_SCALE;
+  buildProfile(dimsIn, wallIn) {
+    const d=dimsIn||this.state.dimensions, S=this.STAGE_SCALE;
     const rM=d.mouth/2*S, rN=d.neckWidth/2*S, rS=d.shoulderWidth/2*S, rB=d.baseWidth/2*S;
     const maxR=Math.max(rM,rN,rS,rB);
     const sidePad=128, top=46;
@@ -1052,7 +1133,7 @@ class Component extends DCLogic {
     const yNeckBot=y;
     seg(rN,rS,d.shoulderHeight,'shoulder',d.shoulderRadius);
     const yShoulderBot=y, ySdrTop=yNeckBot;
-    seg(rS,rB,d.body,'body',this.state.wall);
+    seg(rS,rB,d.body,'body',wallIn!==undefined?wallIn:this.state.wall);
     const yBodyBot=y;
     // heel corner
     const cr=(0.12+0.5*d.heelRadius)*Math.min(rB,S*1.4);
